@@ -1,0 +1,33 @@
+# Build
+build/
+out/
+cmake-build-*/
+*.dll
+*.pdb
+*.lib
+*.exp
+*.ilk
+*.obj
+
+# SCS SDK (baixar do site oficial, nao versionar)
+sdk/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+CMakeSettings.json
+CMakeUserPresets.json
+
+# Engenharia reversa: bancos e dumps locais (podem conter codigo do jogo)
+re/local/
+*.i64
+*.idb
+*.gzf
+*.dmp
+*.CT
+
+# Arquivos locais do Claude (nunca versionar)
+.claude/settings.local.json
