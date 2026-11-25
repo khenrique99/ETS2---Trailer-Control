@@ -13,6 +13,7 @@
 #include <eurotrucks2/scssdk_eut2.h>
 #include <eurotrucks2/scssdk_telemetry_eut2.h>
 
+#include "blinker_sound.h"
 #include "config.h"
 #include "controller.h"
 #include "input_backend.h"
@@ -151,6 +152,16 @@ SCSAPI_VOID onSpeed(const scs_string_t, const scs_u32_t, const scs_value_t *cons
     Controller::instance().setSpeed(value ? value->value_float.value : 0.f);
 }
 
+SCSAPI_VOID onLeftBlinkerLamp(const scs_string_t, const scs_u32_t, const scs_value_t *const value,
+                              const scs_context_t) {
+    BlinkerSound::instance().setLeftLamp(value && value->value_bool.value);
+}
+
+SCSAPI_VOID onRightBlinkerLamp(const scs_string_t, const scs_u32_t, const scs_value_t *const value,
+                               const scs_context_t) {
+    BlinkerSound::instance().setRightLamp(value && value->value_bool.value);
+}
+
 } // namespace
 
 // =====================================================================
@@ -186,6 +197,12 @@ SCSAPI_RESULT scs_telemetry_init(const scs_u32_t version, const scs_telemetry_in
                             SCS_TELEMETRY_CHANNEL_FLAG_none, onMultiplayerOffset, nullptr);
     p->register_for_channel(SCS_TELEMETRY_TRUCK_CHANNEL_speed, SCS_U32_NIL, SCS_VALUE_TYPE_float,
                             SCS_TELEMETRY_CHANNEL_FLAG_none, onSpeed, nullptr);
+
+    // Lampada da seta (pisca): o alarme sonoro apita junto com cada acendida.
+    p->register_for_channel(SCS_TELEMETRY_TRUCK_CHANNEL_light_lblinker, SCS_U32_NIL, SCS_VALUE_TYPE_bool,
+                            SCS_TELEMETRY_CHANNEL_FLAG_none, onLeftBlinkerLamp, nullptr);
+    p->register_for_channel(SCS_TELEMETRY_TRUCK_CHANNEL_light_rblinker, SCS_U32_NIL, SCS_VALUE_TYPE_bool,
+                            SCS_TELEMETRY_CHANNEL_FLAG_none, onRightBlinkerLamp, nullptr);
 
     // Canal de engate por reboque: "trailer.N.connected" (SDK 1.14+, ate 10 reboques).
     int registered = 0;

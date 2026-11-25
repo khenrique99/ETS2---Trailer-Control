@@ -6,15 +6,18 @@
 //
 // Uso: TrailerControl.exe [--demo]
 
+#include "blinker_sound.h"
 #include "model.h"
 #include "hotkey_text.h"
 #include "settings.h"
+#include "shared/ini_edit.h"
 #include "shared/ipc.h"
 
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <mmsystem.h>
 
 #include <objidl.h>
 #include <gdiplus.h>
@@ -66,6 +69,8 @@ enum HitId {
     kHitDemo = 3,
     kHitDiagnose = 4,
     kHitSettings = 5,
+    kHitBlinkerSound = 6,
+    kHitVolume = 7,
     kHitRowAction = 1000, // + indice da articulacao
     kHitRow = 2000,       // + indice
     kHitNode = 3000,      // + indice
@@ -92,6 +97,9 @@ struct App {
     int hover = kHitNone;
     int pressed = kHitNone;
     bool tracking = false;
+    bool draggingVolume = false;
+    int volumeDraft = -1;       // valor enquanto arrasta o controle (-1 = nenhum)
+    RectF volumeTrack;          // area util da barra de volume (ultima pintura)
 
     struct PendingCmd {
         long long seq;
@@ -327,6 +335,57 @@ void openSettings() {
             g.localMessageOk = true;
         }
     }
+}
+
+// Grava uma chave de [som] no .ini do plugin (ele recarrega sozinho; o comando so acelera).
+bool writeSoundSetting(const char *key, const std::string &value) {
+    const std::wstring path = !g.state.configPath.empty() ? g.state.configPath : g.prefs.lastConfigPath;
+    std::string text;
+    if (path.empty() || !tc::ipc::readAll(path, text)) {
+        g.localMessage = L"Não achei o trailer_control.ini (abra o jogo uma vez com o plugin instalado).";
+        g.localMessageOk = false;
+        return false;
+    }
+    if (!tc::ipc::writeAtomic(path, tc::ini::apply(text, {{"som", key, value}}))) {
+        g.localMessage = L"Não consegui gravar o trailer_control.ini (pasta protegida?).";
+        g.localMessageOk = false;
+        return false;
+    }
+    sendCommand("recarregar", -1);
+    return true;
+}
+
+void toggleBlinkerSound() {
+    const bool on = !g.state.blinkerSound;
+    if (!writeSoundSetting("alarme_seta", on ? "1" : "0")) return;
+    g.state.blinkerSound = on;
+    g.localMessage = on ? L"Som da seta ligado." : L"Som da seta desligado.";
+    g.localMessageOk = true;
+}
+
+// Toca o apito no volume escolhido, para ouvir o ajuste na hora (a tela roda fora do jogo).
+void previewBeep(int volume) {
+    static std::vector<std::uint8_t> wav; // precisa viver enquanto toca (SND_MEMORY assincrono)
+    if (volume <= 0) {
+        PlaySoundW(nullptr, nullptr, 0);
+        return;
+    }
+    wav = tc::makeBlinkerBeepWav(volume);
+    PlaySoundW(reinterpret_cast<LPCWSTR>(wav.data()), nullptr, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+}
+
+int volumeFromX(int x) {
+    const float t = (static_cast<float>(x) - g.volumeTrack.X) / std::max(1.0f, g.volumeTrack.Width);
+    return std::clamp(static_cast<int>(t * 100.0f + 0.5f), 0, 100);
+}
+
+void commitVolume() {
+    const int v = g.volumeDraft;
+    g.volumeDraft = -1;
+    if (v < 0) return;
+    if (!writeSoundSetting("volume", std::to_string(v))) return;
+    g.state.blinkerVolume = v;
+    previewBeep(v);
 }
 
 // ------------------------------------------------------------------ pintura
@@ -576,6 +635,32 @@ void paintFooter(Graphics &gr, const RectF &r) {
     }
 }
 
+// Faixa do alarme da seta: liga/desliga + volume de 0 a 100 (clique ou arraste na barra).
+void paintSoundStrip(Graphics &gr, const RectF &r) {
+    fillRound(gr, r, S(10), P.card);
+    strokeRound(gr, r, S(10), P.border);
+    const bool on = g.state.blinkerSound;
+    const float bh = S(32), by = r.Y + (r.Height - bh) / 2;
+    button(gr, RectF(r.X + S(10), by, S(150), bh), on ? L"✓ Som da seta" : L"Som da seta", kHitBlinkerSound, true,
+           BtnStyle::Secondary);
+
+    const int vol = g.volumeDraft >= 0 ? g.volumeDraft : g.state.blinkerVolume;
+    text(gr, L"Volume", RectF(r.X + S(176), r.Y, S(60), r.Height), S(12.5f), P.muted);
+    const float tx = r.X + S(240), tw = std::max(S(60), r.Width - S(240) - S(70));
+    const float cy = r.Y + r.Height / 2;
+    g.volumeTrack = RectF(tx, cy - S(3), tw, S(6));
+    fillRound(gr, g.volumeTrack, S(3), P.graySoft);
+    const Color &fillColor = on ? P.accent : P.gray;
+    if (vol > 0) fillRound(gr, RectF(tx, cy - S(3), tw * vol / 100.0f, S(6)), S(3), fillColor);
+    const float kx = tx + tw * vol / 100.0f, kr = S(9);
+    SolidBrush kb(Color(255, 255, 255, 255));
+    Pen kp(fillColor, S(2));
+    gr.FillEllipse(&kb, kx - kr, cy - kr, 2 * kr, 2 * kr);
+    gr.DrawEllipse(&kp, kx - kr, cy - kr, 2 * kr, 2 * kr);
+    addHit(RectF(tx - kr, r.Y + S(2), tw + 2 * kr, r.Height - S(4)), kHitVolume, true);
+    text(gr, std::to_wstring(vol), RectF(tx + tw + S(16), r.Y, S(48), r.Height), S(13), on ? P.text : P.muted, true);
+}
+
 void paint(HDC hdc, const RECT &rc) {
     const float w = static_cast<float>(rc.right - rc.left), h = static_cast<float>(rc.bottom - rc.top);
     Graphics gr(hdc);
@@ -588,9 +673,12 @@ void paint(HDC hdc, const RECT &rc) {
     const float m = S(20);
     const float footerH = S(52);
     const RectF footer(m, h - footerH, w - 2 * m, footerH);
-    const RectF content(m, S(56) + m, w - 2 * m, h - S(56) - m - footerH - S(6));
-
     const bool live = g.source->isDemo() || (g.state.fileFound && g.state.connected);
+    // A faixa do som (so com o plugin conectado) fica logo acima do rodape.
+    const bool soundStrip = live && !g.source->isDemo();
+    const float stripH = soundStrip ? S(52) : 0.f;
+    const RectF content(m, S(56) + m, w - 2 * m, h - S(56) - m - footerH - S(6) - stripH);
+    if (soundStrip) paintSoundStrip(gr, RectF(m, footer.Y - stripH, w - 2 * m, stripH - S(8)));
     if (!live) {
         paintWaiting(gr, content);
     } else {
@@ -621,6 +709,7 @@ void onClick(int id) {
     } else if (id == kHitDemo) setDemo(!g.source->isDemo());
     else if (id == kHitDiagnose) sendCommand("diagnostico", -1);
     else if (id == kHitSettings) openSettings();
+    else if (id == kHitBlinkerSound) toggleBlinkerSound();
     else if (id >= kHitRowAction && id < kHitRow) toggleJoint(id - kHitRowAction);
     else if (id >= kHitRow && id < kHitNode) selectJoint(id - kHitRow, true);
     else if (id >= kHitNode) selectJoint(id - kHitNode, true);
@@ -718,6 +807,11 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             TrackMouseEvent(&tme);
             g.tracking = true;
         }
+        if (g.draggingVolume) {
+            g.volumeDraft = volumeFromX(GET_X_LPARAM(lp));
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
         const int h = hitTest(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         if (h != g.hover) {
             g.hover = h;
@@ -738,10 +832,21 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_LBUTTONDOWN:
         g.pressed = hitTest(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         SetCapture(hwnd);
+        if (g.pressed == kHitVolume) { // clique ou arrasto na barra define o volume
+            g.draggingVolume = true;
+            g.volumeDraft = volumeFromX(GET_X_LPARAM(lp));
+        }
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     case WM_LBUTTONUP: {
         ReleaseCapture();
+        if (g.draggingVolume) {
+            g.draggingVolume = false;
+            g.pressed = kHitNone;
+            commitVolume();
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
         const int h = hitTest(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         const int p = g.pressed;
         g.pressed = kHitNone;

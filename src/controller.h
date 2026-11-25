@@ -57,6 +57,11 @@ private:
     CombinationSnapshot currentSnapshot() const;
     void writeStatusIfNeeded(const CombinationSnapshot &snap);
     void checkMultiplayer(unsigned long long now);
+    // Relê o .ini e aplica. false se o arquivo nao pode ser lido (tenta de novo depois).
+    bool reloadConfig();
+    // Detecta edicao do .ini (a mao ou pela tela) e recarrega sozinho.
+    void watchConfig(unsigned long long now);
+    static unsigned long long configStamp();
 
     TrailerRegistry registry_;
     HotkeyListener hotkeys_;
@@ -71,6 +76,8 @@ private:
     std::atomic<int> multiplayerOffset_{0};
     unsigned long long lastMultiplayerCheckMs_ = 0;
     bool allowConvoy_ = true;
+    unsigned long long configStamp_ = 0;       // ultima gravacao do .ini ja aplicada (0 = ainda nao vista)
+    unsigned long long lastConfigCheckMs_ = 0;
 
     bool requireStopped_ = true;
     double maxSpeedKmh_ = 3.0;

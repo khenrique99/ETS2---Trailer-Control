@@ -64,6 +64,11 @@ back.
 | 12 | On a B-double, do the same with joint 1 | Same as steps 9–10 | |
 | 13 | In **Configurações**, change the shortcut (e.g. Ctrl + F9), save, go back and use it | The window opens with the new shortcut; the header shows "Esc ou Ctrl + F9" | |
 | 14 | (Optional) In a **Convoy** session, repeat steps 9–10 | Works the same; note how other players see the loose trailer | |
+| 15 | With a trailer coupled, turn on the turn signal (and hazards) | One beep per light flash; it stops when you turn the signal off | |
+| 16 | In the window click **Som da seta** (the ✓ disappears) and turn the signal on | No sound; clicking again brings the beep back | |
+| 17 | With no trailer coupled, turn the signal on | No beep | |
+| 18 | Drag the volume bar (0–100) | A preview beep plays; the signal beep changes volume right away; 0 = muted | |
+| 19 | Edit `volume` under `[som]` in the `.ini` while the game is running | Applies within 1 s, no restart | |
 
 Also note anything **unexpected**: trailer "jumping", weird physics, freezes, trailers
 disappearing, warnings when delivering the cargo, the window not showing over the game, etc.

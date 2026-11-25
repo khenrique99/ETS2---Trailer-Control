@@ -16,6 +16,7 @@
 #include <eurotrucks2/scssdk_telemetry_eut2.h>
 
 #include "json.h"
+#include "shared/ini_edit.h"
 #include "shared/ipc.h"
 
 #include <cstdio>
@@ -139,6 +140,13 @@ struct Step {
     bool expectCoupled2 = false;
 };
 
+std::wstring widen(const std::string &utf8) {
+    const int n = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+    std::wstring w(n > 0 ? static_cast<size_t>(n - 1) : 0, L'\0');
+    if (n > 1) MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &w[0], n);
+    return w;
+}
+
 bool readStatus(tc::json::Value &v) {
     std::string text;
     return tc::ipc::readAll(tc::ipc::statusPath(), text) && tc::json::parse(text, v);
@@ -219,10 +227,34 @@ int selfTest(bool &held) {
         for (int f = 0; f < 60 && !ok; ++f) {
             frame(held);
             ok = readStatus(v) && v["last_command"]["seq"].asInt() == seq && v["last_command"]["ok"].asBool() &&
-                 v["app_hotkey"].asString() == "CTRL+MINUS" && !v["config_path"].asString().empty();
+                 v["app_hotkey"].asString() == "CTRL+MINUS" && !v["config_path"].asString().empty() &&
+                 v["blinker_sound"].asBool(false) && v["blinker_volume"].asInt() == 60; // padrao do .ini
         }
         std::printf("[teste] %-14s -> %s  (%s)\n", "recarregar", ok ? "OK" : "FALHOU",
                     v["last_command"]["result"].asString().c_str());
+        if (!ok) ++failures;
+    }
+    // Editar o .ini (a mao ou pela tela) vale sozinho, sem comando: o plugin vigia o arquivo.
+    {
+        tc::json::Value v;
+        std::string original;
+        const bool read = readStatus(v) && tc::ipc::readAll(widen(v["config_path"].asString()), original);
+        const std::wstring path = widen(v["config_path"].asString());
+        auto waitState = [&](int volume, bool sound) {
+            for (int f = 0; f < 400; ++f) { // ~6 s: o plugin checa o arquivo a cada 1 s
+                frame(held);
+                if (readStatus(v) && v["blinker_volume"].asInt() == volume && v["blinker_sound"].asBool(!sound) == sound)
+                    return true;
+            }
+            return false;
+        };
+        bool ok = read && tc::ipc::writeAtomic(path, tc::ini::apply(original, {{"som", "volume", "30"}})) &&
+                  waitState(30, true);
+        ok = ok && tc::ipc::writeAtomic(path, tc::ini::apply(original, {{"som", "alarme_seta", "0"}})) &&
+             waitState(60, false);
+        // Devolve o .ini como estava (e confere que o plugin acompanha)
+        ok = tc::ipc::writeAtomic(path, original) && waitState(60, true) && ok;
+        std::printf("[teste] %-14s -> %s\n", "ini vigiado", ok ? "OK" : "FALHOU");
         if (!ok) ++failures;
     }
     // seq menor que o anterior (relogio do PC voltou / outro app) ainda e executado;

@@ -1,6 +1,7 @@
 #include "controller.h"
 
 #include "app_launcher.h"
+#include "blinker_sound.h"
 #include "command_inbox.h"
 #include "input_backend.h"
 #include "log.h"
@@ -18,6 +19,8 @@ namespace tc {
 namespace {
 // Intervalo entre consultas ao command.txt.
 constexpr unsigned long long kInboxPollMs = 100;
+// Intervalo entre checagens de mudanca no trailer_control.ini.
+constexpr unsigned long long kConfigWatchMs = 1000;
 } // namespace
 
 Controller &Controller::instance() {
@@ -44,6 +47,9 @@ void Controller::configure(const Config &cfg) {
                    cfg.getDouble("memoria", "distancia_max_engate_m", 1.5));
     allowConvoy_ = cfg.getBool("memoria", "permitir_convoy", true);
     lastMultiplayerCheckMs_ = 0; // reavalia ja no proximo tick
+
+    BlinkerSound::instance().configure(cfg.getBool("som", "alarme_seta", true),
+                                       static_cast<int>(cfg.getDouble("som", "volume", 60)));
 
     // Unico atalho: abrir a tela. Todo o resto e feito pela tela.
     appHotkey_ = cfg.get("atalhos", "abrir_tela", "CTRL+MINUS");
@@ -109,9 +115,37 @@ void Controller::checkMultiplayer(unsigned long long now) {
     MemoryBackend::instance().setMultiplayer(why);
 }
 
+unsigned long long Controller::configStamp() {
+    WIN32_FILE_ATTRIBUTE_DATA d;
+    if (!GetFileAttributesExW(configPath().c_str(), GetFileExInfoStandard, &d)) return 0;
+    return (static_cast<unsigned long long>(d.ftLastWriteTime.dwHighDateTime) << 32) | d.ftLastWriteTime.dwLowDateTime;
+}
+
+bool Controller::reloadConfig() {
+    const unsigned long long stamp = configStamp(); // antes de ler: mudanca no meio gera nova recarga
+    Config cfg;
+    if (!cfg.load(configPath())) return false;
+    configStamp_ = stamp;
+    configure(cfg);
+    return true;
+}
+
+void Controller::watchConfig(unsigned long long now) {
+    if (now - lastConfigCheckMs_ < kConfigWatchMs) return;
+    lastConfigCheckMs_ = now;
+    const unsigned long long stamp = configStamp();
+    if (stamp == 0) return;
+    if (configStamp_ == 0) {
+        configStamp_ = stamp; // primeira vista: o que ja foi carregado na inicializacao
+        return;
+    }
+    if (stamp != configStamp_ && reloadConfig()) log::info("trailer_control.ini mudou: configuracao recarregada.");
+}
+
 void Controller::tick() {
     const unsigned long long now = GetTickCount64();
     checkMultiplayer(now);
+    watchConfig(now);
     if (now - lastInboxPollMs_ >= kInboxPollMs) {
         lastInboxPollMs_ = now;
         // Mesmo seq de novo = reenvio do app (acrescentou num command.txt que ainda nao tinhamos
@@ -166,7 +200,10 @@ void Controller::tick() {
         }
     }
 
-    writeStatusIfNeeded(currentSnapshot());
+    const CombinationSnapshot snap = currentSnapshot();
+    // "Qualquer reboque": basta ter algo engatado no cavalo.
+    BlinkerSound::instance().update(paused_, !snap.joints.empty() && snap.joints[0].coupled);
+    writeStatusIfNeeded(snap);
 }
 
 void Controller::writeStatusIfNeeded(const CombinationSnapshot &snap) {
@@ -176,6 +213,8 @@ void Controller::writeStatusIfNeeded(const CombinationSnapshot &snap) {
     for (const Joint &j : snap.joints) key += j.coupled ? '1' : '0';
     key += InputBackend::instance().deviceActive() ? 'a' : 'i';
     key += std::to_string(deferred_.size());
+    key += BlinkerSound::instance().enabled() ? 's' : 'n';
+    key += std::to_string(BlinkerSound::instance().volume());
 
     const unsigned long long now = GetTickCount64();
     if (key == lastStatusKey_ && now - lastStatusWriteMs_ < ipc::kHeartbeatMs) return;
@@ -209,6 +248,8 @@ void Controller::writeStatusIfNeeded(const CombinationSnapshot &snap) {
     }
     info.appHotkey = appHotkey_;
     info.queuedCommands = deferred_.size();
+    info.blinkerSound = BlinkerSound::instance().enabled();
+    info.blinkerVolume = BlinkerSound::instance().volume();
     writeStatus(info);
 }
 
@@ -297,12 +338,10 @@ void Controller::execute(const std::string &actionLine) {
     }
 
     if (action == "recarregar") {
-        Config cfg;
-        if (!cfg.load(configPath())) {
+        if (!reloadConfig()) {
             report("Nao consegui ler o trailer_control.ini.", false);
             return;
         }
-        configure(cfg);
         report("Configuracoes aplicadas.");
         return;
     }

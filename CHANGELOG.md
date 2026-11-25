@@ -4,6 +4,15 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+### Adicionado
+- Alarme sonoro externo da seta (`[som]` no `.ini`): apita junto com cada acendida da luz do
+  pisca enquanto houver reboque engatado. Na tela, faixa "Som da seta" com liga/desliga e barra
+  de volume de 0 a 100 (clique ou arraste; toca um apito de prévia). Toca pelo Windows (não
+  segue o volume do ETS2, sem 3D). Usa os canais `truck.light.lblinker` / `truck.light.rblinker`.
+  Testado sem o jogo (lógica, geração do som e status); falta ouvir no jogo.
+- O plugin vigia o `trailer_control.ini` e recarrega sozinho em até 1 s quando ele muda (edição
+  à mão ou pela tela), sem precisar reiniciar o jogo nem mandar comando.
+- `LICENSE` (MIT) em nome de Kelvin Henrique Ferreira.
 
 
 ## [0.2.0] - 2026-11-25
