@@ -11,7 +11,7 @@ train, triple, HCT, from the base game and from mods.
 | **Version** | 0.2.0 (experimental) |
 | **Game** | ETS2 **1.62.x** — dolly/B-double uncoupling mapped for **1.62.3.3** |
 | **OS** | Windows 10/11 64-bit |
-| **Mode** | single-player only (internal uncoupling turns itself off in TruckersMP and Convoy) |
+| **Mode** | single-player and **Convoy**; in **TruckersMP** internal uncoupling turns itself off |
 
 ## Download and install
 
@@ -60,7 +60,8 @@ live in `trailer_control.ini`, with comments explaining each one.
 | Uncouple/couple **internal joints** (dolly, B-double, road train) | 🧪 **1.62.3.3** only, not yet tested in game |
 | Real state of internal joints (read from memory) | 🧪 same |
 | Shortcut chosen in the window | ✅ tested without the game |
-| Turn internal uncoupling off in multiplayer (TruckersMP / Convoy) | ✅ tested without the game |
+| Internal uncoupling in **Convoy** (`permitir_convoy` in the `.ini`) | 🧪 allowed, tested without the game |
+| Turn internal uncoupling off in **TruckersMP** | ✅ tested without the game |
 
 ### How internal uncoupling works
 
@@ -76,7 +77,7 @@ in Portuguese):
 
 Safety: it only turns on if the exe version is exactly a mapped one, the first bytes of each
 function match and every trailer's vtable points to the expected functions; every read and call is
-exception-guarded; it turns off in multiplayer. On any failure that part switches off and the rest
+exception-guarded; it turns off in TruckersMP. On any failure that part switches off and the rest
 keeps working. After a game update (1.62.4, 1.63…) internal uncoupling stays unavailable until
 the table for the new version is added.
 

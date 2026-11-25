@@ -242,7 +242,7 @@ int selfTest(bool &held) {
         std::printf("[teste] %-14s -> %s\n", "seq fora ordem", ok && dupIgnored ? "OK" : "FALHOU");
         if (!(ok && dupIgnored)) ++failures;
     }
-    // Convoy (multiplayer): backend de memoria desliga; volta ao sair.
+    // Multiplayer: Convoy liberado, TruckersMP bloqueado.
     {
         auto setOffset = [](int minutes) {
             scs_value_t v{};
@@ -260,11 +260,29 @@ int selfTest(bool &held) {
             }
             return false;
         };
+        // Convoy liberado (permitir_convoy = 1, o padrao): o backend NAO pode desligar.
         setOffset(37);
-        const bool off = waitStatus("Convoy", true);
+        bool convoyStayedOn = true;
+        tc::json::Value v;
+        for (int f = 0; f < 180; ++f) { // 3 s: passa por pelo menos uma checagem
+            frame(held);
+            if (readStatus(v) && v["memory_status"].asString().find("multiplayer") != std::string::npos)
+                convoyStayedOn = false;
+        }
         setOffset(0);
+        std::printf("[teste] %-14s -> %s\n", "convoy", convoyStayedOn ? "OK" : "FALHOU");
+        if (!convoyStayedOn) ++failures;
+
+        // TruckersMP: a DLL dele no processo desliga o backend; ao sair, volta.
+        wchar_t dir[MAX_PATH];
+        GetModuleFileNameW(nullptr, dir, MAX_PATH);
+        std::wstring tmp(dir);
+        tmp = tmp.substr(0, tmp.find_last_of(L"\\/")) + L"\\core_ets2mp.dll";
+        HMODULE fakeTmp = LoadLibraryW(tmp.c_str());
+        const bool off = fakeTmp && waitStatus("TruckersMP", true);
+        if (fakeTmp) FreeLibrary(fakeTmp);
         const bool back = waitStatus("multiplayer", false);
-        std::printf("[teste] %-14s -> %s\n", "multiplayer", off && back ? "OK" : "FALHOU");
+        std::printf("[teste] %-14s -> %s\n", "truckersmp", off && back ? "OK" : "FALHOU");
         if (!(off && back)) ++failures;
     }
     std::printf("[teste] %d falha(s)\n", failures);

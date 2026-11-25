@@ -42,6 +42,8 @@ void Controller::configure(const Config &cfg) {
     mem.setRegistry(&registry_);
     mem.initialize(cfg.getBool("memoria", "habilitado", false), cfg.get("memoria", "versao_jogo"),
                    cfg.getDouble("memoria", "distancia_max_engate_m", 1.5));
+    allowConvoy_ = cfg.getBool("memoria", "permitir_convoy", true);
+    lastMultiplayerCheckMs_ = 0; // reavalia ja no proximo tick
 
     // Unico atalho: abrir a tela. Todo o resto e feito pela tela.
     appHotkey_ = cfg.get("atalhos", "abrir_tela", "CTRL+MINUS");
@@ -102,7 +104,8 @@ void Controller::checkMultiplayer(unsigned long long now) {
     lastMultiplayerCheckMs_ = now;
     std::string why;
     if (GetModuleHandleW(L"core_ets2mp.dll") || GetModuleHandleW(L"core_atsmp.dll")) why = "TruckersMP";
-    else if (multiplayerOffset_.load() != 0) why = "Convoy";
+    // Convoy (multiplayer oficial da SCS) e liberado por padrao; o TruckersMP nunca (anticheat/ban).
+    else if (multiplayerOffset_.load() != 0 && !allowConvoy_) why = "Convoy";
     MemoryBackend::instance().setMultiplayer(why);
 }
 

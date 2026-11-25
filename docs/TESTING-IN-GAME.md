@@ -7,9 +7,9 @@ plugin). What still needs confirming is the behaviour inside ETS2 — mainly dol
 uncoupling, which works on the game's memory. If you can, run the checklist below and report
 back.
 
-> **Before you start:** save your game. Internal uncoupling only turns on in ETS2 **1.62.3.3** and
-> only in single-player; on another version, in TruckersMP or in Convoy it turns itself off and
-> only truck uncoupling works.
+> **Before you start:** save your game. Internal uncoupling only turns on in ETS2 **1.62.3.3**, in
+> single-player or in **Convoy**; on another version or in TruckersMP it turns itself off and only
+> truck uncoupling works.
 
 > The window text is in Brazilian Portuguese for now: **Engatar** = couple, **Desengatar** =
 > uncouple, **Engatada** = coupled, **Solta** = uncoupled, **Configurações** = settings,
@@ -64,7 +64,7 @@ back.
 | 11 | Drive a bit, stop and try **Engatar** on joint 1 with the trailers apart | The window refuses: "engates a X m (maximo 1.50 m)" | |
 | 12 | On a B-double, do the same with joint 1 | Same as steps 9–10 | |
 | 13 | In **Configurações**, change the shortcut (e.g. Ctrl + F9), save, go back and use it | The window opens with the new shortcut; the header shows "Esc ou Ctrl + F9" | |
-| 14 | (Optional) Join a **Convoy** session | Internal joints show "indisponível: desligado no multiplayer (Convoy)" | |
+| 14 | (Optional) In a **Convoy** session, repeat steps 9–10 | Works the same; note how other players see the loose trailer | |
 
 Also note anything **unexpected**: trailer "jumping", weird physics, freezes, trailers
 disappearing, warnings when delivering the cargo, the window not showing over the game, etc.
@@ -87,10 +87,11 @@ Open an [issue](https://github.com/khenrique99/ETS2---Trailer-Control/issues) wi
 - **Ctrl + - does not open the window:** check that `TrailerControl.exe` is in the `plugins`
   folder next to the DLL. You can also open the exe directly; it connects by itself. If something
   else in the game uses Ctrl + -, change the shortcut in Configurações.
+- **You do not want internal uncoupling in Convoy:** set `permitir_convoy = 0` under `[memoria]`.
 - **The window stays on "Aguardando o jogo" (waiting for the game):** is the DLL in
   `bin\win_x64\plugins`? Did you accept the SDK warning?
 - **Internal joints "indisponível" (unavailable):** the message next to it gives the reason
-  (different version, exe bytes do not match, multiplayer, turned off in the `.ini`).
+  (different version, exe bytes do not match, TruckersMP, turned off in the `.ini`).
 - **Coupling refused even with the trailers touching:** raise `distancia_max_engate_m` in the
   `.ini` (or `0` to skip the check) and report the value the window showed.
 - **"Não consegui gravar" (could not save) in Configurações:** the game folder is protected; run
