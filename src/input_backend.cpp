@@ -108,7 +108,7 @@ SCSAPI_RESULT InputBackend::onEvent(scs_input_event_t *const event, const scs_u3
         self->phase_ = Phase::Pressed;
         self->framesHeld_ = 0;
         event->input_index = 0;
-        event->value.value_bool.value = 1;
+        event->value_bool.value = 1;
         self->emittedThisFrame_ = true;
         return SCS_RESULT_ok;
     }
@@ -116,7 +116,7 @@ SCSAPI_RESULT InputBackend::onEvent(scs_input_event_t *const event, const scs_u3
     if (self->phase_ == Phase::Pressed && self->framesHeld_ >= kHoldFrames) {
         self->phase_ = Phase::Idle;
         event->input_index = 0;
-        event->value.value_bool.value = 0;
+        event->value_bool.value = 0;
         self->emittedThisFrame_ = true;
         return SCS_RESULT_ok;
     }
