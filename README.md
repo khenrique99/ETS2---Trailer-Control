@@ -135,7 +135,7 @@ tools/ghidra/           scripts headless do Ghidra
 
 ## Licença
 
-[MIT](LICENSE) © 2026 Kelvin Henrique Ferreira.
+© 2026 Kelvin Henrique Ferreira, sob a [PolyForm Noncommercial 1.0.0](LICENSE): uso pessoal e não comercial liberado; **vender ou usar comercialmente não é permitido** sem autorização do autor.
 
 ## Aviso
 
