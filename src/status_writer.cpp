@@ -65,6 +65,8 @@ void writeStatus(const StatusInfo &info) {
     j << "  \"config_path\": \"" << esc(info.configPath) << "\",\n";
     j << "  \"app_hotkey\": \"" << esc(info.appHotkey) << "\",\n";
     j << "  \"queued_commands\": " << info.queuedCommands << ",\n";
+    j << "  \"blinker_sound\": " << b(info.blinkerSound) << ",\n";
+    j << "  \"blinker_volume\": " << info.blinkerVolume << ",\n";
     j << "  \"combination\": \"" << esc(snap.combinationName) << "\",\n";
     j << "  \"chain_type\": \"" << esc(snap.chainType) << "\",\n";
     j << "  \"selected_joint\": " << info.selectedJoint << ",\n";

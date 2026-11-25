@@ -37,6 +37,12 @@ rodotrês, HCT, do jogo original e de mods.
   aperte a combinação e **Salvar**. Vale na hora.
 - **Diagnóstico**: grava no `game.log.txt` o que o plugin leu da memória (só leitura) — útil para
   relatar problemas.
+- **Som da seta** (faixa acima do rodapé): liga/desliga o alarme externo da seta — um apito junto
+  com cada piscada da luz, enquanto houver reboque engatado. A barra ajusta o **volume de 0 a
+  100** (clique ou arraste; toca um apito de prévia). O som sai pelo Windows: não segue o volume
+  do ETS2 e não é 3D.
+- O plugin vigia o `trailer_control.ini`: qualquer mudança (pela tela ou à mão) vale em até 1 s,
+  sem reiniciar o jogo.
 - Para engatar caminhão parado: limite de 3 km/h. Para engatar uma articulação interna, os
   engates precisam estar a até 1,5 m.
 
@@ -57,6 +63,7 @@ identificam dolly de mod) ficam no `trailer_control.ini`, com comentários expli
 | Atalho configurável pela tela | ✅ testado sem o jogo |
 | Desengate interno no **Convoy** (`permitir_convoy` no `.ini`) | 🧪 liberado, testado sem o jogo |
 | Desligar o desengate interno no **TruckersMP** | ✅ testado sem o jogo |
+| Alarme sonoro da seta (liga/desliga e volume) | 🧪 lógica testada sem o jogo, falta ouvir no jogo |
 
 ### Como funciona o desengate interno
 
@@ -125,6 +132,10 @@ tests/                  testes + jogo falso
 docs/re/                engenharia reversa por versão do jogo
 tools/ghidra/           scripts headless do Ghidra
 ```
+
+## Licença
+
+[MIT](LICENSE) © 2026 Kelvin Henrique Ferreira.
 
 ## Aviso
 

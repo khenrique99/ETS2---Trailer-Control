@@ -61,6 +61,11 @@ resultado.
 | 12 | Num bitrem, faça o mesmo com a articulação 1 | Igual aos passos 9–10 | |
 | 13 | Em **Configurações**, troque o atalho (ex.: Ctrl + F9), salve, volte ao jogo e use o atalho novo | A tela abre com o atalho novo; o cabeçalho mostra "Esc ou Ctrl + F9" | |
 | 14 | (Opcional) Num comboio **Convoy**, repita os passos 9–10 | Funciona igual; anote como os outros jogadores veem o reboque solto | |
+| 15 | Com carreta engatada, ligue a seta (e o pisca-alerta) | Um apito a cada acendida da luz; ao desligar a seta, para | |
+| 16 | Na tela, clique **Som da seta** (some o ✓) e ligue a seta | Sem som; clicar de novo volta o apito | |
+| 17 | Sem reboque engatado, ligue a seta | Sem apito | |
+| 18 | Arraste a barra de volume (0–100) | Toca uma prévia; o apito da seta muda de volume na hora; 0 = mudo | |
+| 19 | Edite `volume` em `[som]` no `.ini` com o jogo aberto | Vale em até 1 s, sem reiniciar | |
 
 Anote também o que **não** for esperado: reboque que "pula", física estranha, travamento,
 reboque sumindo, aviso na entrega da carga, tela que não aparece por cima do jogo etc.

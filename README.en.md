@@ -38,6 +38,12 @@ train, triple, HCT, from the base game and from mods.
   **Alterar…** (change), press the key combination and **Salvar** (save). It applies immediately.
 - **Diagnóstico** (diagnostics): writes what the plugin read from memory to `game.log.txt`
   (read-only) — useful when reporting problems.
+- **Som da seta** (turn-signal sound, strip above the footer): turns the external turn-signal
+  alarm on/off — a beep with each flash of the light while a trailer is coupled. The bar sets the
+  **volume from 0 to 100** (click or drag; plays a preview beep). The sound plays through
+  Windows: it does not follow the ETS2 volume and is not 3D.
+- The plugin watches `trailer_control.ini`: any change (from the window or by hand) applies within
+  1 s, no game restart.
 - The truck must be stopped (3 km/h limit). To couple an internal joint, the hitches must be
   within 1.5 m of each other.
 
@@ -60,6 +66,7 @@ live in `trailer_control.ini`, with comments explaining each one.
 | Shortcut chosen in the window | ✅ tested without the game |
 | Internal uncoupling in **Convoy** (`permitir_convoy` in the `.ini`) | 🧪 allowed, tested without the game |
 | Turn internal uncoupling off in **TruckersMP** | ✅ tested without the game |
+| Turn-signal alarm sound (on/off and volume) | 🧪 logic tested without the game, not yet heard in game |
 
 ### How internal uncoupling works
 
@@ -109,6 +116,10 @@ In-game test plan: [docs/TESTING-IN-GAME.md](docs/TESTING-IN-GAME.md).
 
 Files in `Documents\ETS2TrailerControl\`: `status.json` (plugin → window, heartbeat every 1 s)
 and `command.txt` (window → plugin). Protocol in [src/shared/ipc.h](src/shared/ipc.h).
+
+## License
+
+[MIT](LICENSE) © 2026 Kelvin Henrique Ferreira.
 
 ## Disclaimer
 

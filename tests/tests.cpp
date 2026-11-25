@@ -1,5 +1,6 @@
 // Testes que rodam sem o jogo: protocolo, JSON e o modelo do app.
 // Uso: ctest -C Release  (ou rodar tc_tests.exe direto)
+#include "blinker_sound.h"
 #include "command_inbox.h"
 #include "json.h"
 #include "model.h"
@@ -7,8 +8,11 @@
 #include "shared/ipc.h"
 #include "shared/ini_edit.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace {
 int g_failures = 0;
@@ -148,7 +152,41 @@ void testDemo() {
 }
 } // namespace
 
+void testBlinkerSound() {
+    using tc::BlinkerSoundAction;
+    using tc::decideBlinkerSound;
+    // (apagada antes, acesa agora, ligado, pausado, engatado)
+    CHECK(decideBlinkerSound(false, true, true, false, true) == BlinkerSoundAction::Play);
+    CHECK(decideBlinkerSound(true, true, true, false, true) == BlinkerSoundAction::None);   // ja tocou
+    CHECK(decideBlinkerSound(true, false, true, false, true) == BlinkerSoundAction::Stop);  // luz apagou
+    CHECK(decideBlinkerSound(false, false, true, false, true) == BlinkerSoundAction::None);
+    CHECK(decideBlinkerSound(false, true, false, false, true) == BlinkerSoundAction::None); // desligado
+    CHECK(decideBlinkerSound(true, true, false, false, true) == BlinkerSoundAction::Stop);  // desligou tocando
+    CHECK(decideBlinkerSound(false, true, true, true, true) == BlinkerSoundAction::None);   // jogo pausado
+    CHECK(decideBlinkerSound(false, true, true, false, false) == BlinkerSoundAction::None); // sem reboque
+    CHECK(decideBlinkerSound(true, true, true, false, false) == BlinkerSoundAction::Stop);  // soltou o reboque
+
+    const auto wav = tc::makeBlinkerBeepWav(60);
+    CHECK(wav.size() > 44 && std::string(wav.begin(), wav.begin() + 4) == "RIFF");
+    CHECK(std::string(wav.begin() + 8, wav.begin() + 12) == "WAVE");
+    const std::uint32_t dataBytes = wav[40] | (wav[41] << 8) | (wav[42] << 16) | (static_cast<std::uint32_t>(wav[43]) << 24);
+    CHECK(dataBytes + 44 == wav.size());
+    // Volume 0 gera silencio; volume maior gera amostras maiores.
+    auto peak = [](const std::vector<std::uint8_t> &w) {
+        int p = 0;
+        for (size_t i = 44; i + 1 < w.size(); i += 2) {
+            const int s = static_cast<std::int16_t>(w[i] | (w[i + 1] << 8));
+            p = std::max(p, s < 0 ? -s : s);
+        }
+        return p;
+    };
+    CHECK(peak(tc::makeBlinkerBeepWav(0)) == 0);
+    CHECK(peak(tc::makeBlinkerBeepWav(100)) > peak(tc::makeBlinkerBeepWav(30)));
+    CHECK(peak(tc::makeBlinkerBeepWav(100)) < 32767);
+}
+
 int main() {
+    testBlinkerSound();
     testJson();
     testCommands();
     testStatus();

@@ -36,6 +36,8 @@ bool stateFromJson(const json::Value &v, unsigned long long nowMs, GameState &s)
     s.configPath = widen(v["config_path"].asString());
     s.appHotkey = widen(v["app_hotkey"].asString());
     s.queuedCommands = static_cast<int>(v["queued_commands"].asInt(0));
+    s.blinkerSound = v["blinker_sound"].asBool(false);
+    s.blinkerVolume = static_cast<int>(v["blinker_volume"].asInt(60));
     s.exeVersion = widen(v["exe_version"].asString());
     s.pluginVersion = widen(v["plugin_version"].asString());
     s.combination = widen(v["combination"].asString());

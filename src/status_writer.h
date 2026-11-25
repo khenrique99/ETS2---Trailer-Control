@@ -30,6 +30,8 @@ struct StatusInfo {
     std::string configPath;          // trailer_control.ini (UTF-8) - o app edita pela tela
     std::string appHotkey;           // atalho que abre a tela
     size_t queuedCommands = 0;       // comandos esperando o jogo despausar
+    bool blinkerSound = false;       // alarme sonoro da seta ligado
+    int blinkerVolume = 60;          // 0..100
 };
 
 // Grava Documentos\ETS2TrailerControl\status.json (lido pelo app externo; ver shared/ipc.h).

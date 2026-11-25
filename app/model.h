@@ -32,6 +32,8 @@ struct GameState {
     std::wstring memoryStatus, exeVersion, pluginVersion, combination, lastMessage;
     std::wstring configPath, appHotkey; // .ini do plugin (para a tela de configuracoes)
     int queuedCommands = 0;             // comandos esperando o jogo despausar
+    bool blinkerSound = false;          // alarme sonoro da seta ligado no plugin
+    int blinkerVolume = 60;             // 0..100
     bool lastOk = true;
     long long lastCommandSeq = 0;
     bool lastCommandOk = true;
