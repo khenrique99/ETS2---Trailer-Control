@@ -5,10 +5,34 @@
 
 namespace tc {
 
-// Grava Documentos\ETS2TrailerControl\status.json com a composicao atual,
-// a articulacao selecionada e o ultimo comando. Serve para depuracao e para
-// um overlay/app externo ler (planejado para a v2).
-void writeStatus(const CombinationSnapshot &snap, int selectedJoint, const std::string &lastMessage,
-                 bool memoryBackendReady);
+constexpr const char *kPluginVersion = "0.2.0";
+
+struct StatusInfo {
+    const CombinationSnapshot *snap = nullptr;
+    int selectedJoint = 0;
+    std::string lastMessage;
+    bool lastOk = true;
+
+    long long lastCommandSeq = 0;   // ultimo comando do app processado (0 = nenhum)
+    std::string lastCommandResult;
+    bool lastCommandOk = true;
+
+    bool paused = true;
+    double speedKmh = 0.0;
+    bool requireStopped = true;
+    double maxSpeedKmh = 3.0;
+
+    bool inputReady = false;        // dispositivo virtual registrado
+    bool inputActive = false;       // jogador associou o controle
+    bool memoryReady = false;
+    std::string memoryStatus;
+    std::string exeVersion;
+    std::string configPath;          // trailer_control.ini (UTF-8) - o app edita pela tela
+    std::string appHotkey;           // atalho que abre a tela
+    size_t queuedCommands = 0;       // comandos esperando o jogo despausar
+};
+
+// Grava Documentos\ETS2TrailerControl\status.json (lido pelo app externo; ver shared/ipc.h).
+void writeStatus(const StatusInfo &info);
 
 } // namespace tc

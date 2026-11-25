@@ -31,3 +31,6 @@ re/local/
 
 # Arquivos locais do Claude (nunca versionar)
 .claude/settings.local.json
+
+# Pacotes gerados por scripts/build.ps1
+dist/

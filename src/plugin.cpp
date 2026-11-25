@@ -43,15 +43,11 @@ std::string versionString(scs_u32_t v) {
 void loadConfigOnce(scs_u32_t gameVersion) {
     std::call_once(g_configOnce, [gameVersion] {
         g_gameVersion = versionString(gameVersion);
-        const std::wstring path = pluginDirectory() + L"\\trailer_control.ini";
+        const std::wstring path = Controller::configPath();
         if (!g_config.load(path)) {
             log::warn("trailer_control.ini nao encontrado ao lado da DLL; usando padroes.");
         }
-        Controller::instance().configure(g_config);
-        MemoryBackend::instance().initialize(
-            g_config.getBool("memoria", "habilitado", false), g_gameVersion,
-            g_config.get("memoria", "versao_jogo"), g_config.get("memoria", "assinatura_desengate"),
-            g_config.get("memoria", "assinatura_engate"));
+        Controller::instance().configure(g_config); // inclui o backend de memoria e o atalho
     });
 }
 
@@ -110,7 +106,18 @@ SCSAPI_VOID onConfiguration(const scs_event_t, const void *const info, const scs
     }
     const int idx = parseTrailerConfigId(cfg->id);
     if (idx >= 0) {
-        Controller::instance().registry().onTrailerConfig(idx, collectAttributes(cfg->attributes));
+        TrailerRegistry &reg = Controller::instance().registry();
+        reg.onTrailerConfig(idx, collectAttributes(cfg->attributes));
+        bool hasHook = false;
+        scs_value_fvector_t hook{};
+        for (const scs_named_value_t *a = cfg->attributes; a && a->name; ++a) {
+            if (std::strcmp(a->name, SCS_TELEMETRY_CONFIG_ATTRIBUTE_hook_position) == 0 &&
+                a->value.type == SCS_VALUE_TYPE_fvector) {
+                hook = a->value.value_fvector;
+                hasHook = true;
+            }
+        }
+        reg.onTrailerHook(idx, hasHook, hook.x, hook.y, hook.z);
     }
 }
 
@@ -118,6 +125,25 @@ SCSAPI_VOID onTrailerConnected(const scs_string_t, const scs_u32_t, const scs_va
                                const scs_context_t ctx) {
     const int idx = static_cast<int>(reinterpret_cast<intptr_t>(ctx));
     Controller::instance().registry().onTrailerConnected(idx, value && value->value_bool.value);
+}
+
+SCSAPI_VOID onTrailerPlacement(const scs_string_t, const scs_u32_t, const scs_value_t *const value,
+                               const scs_context_t ctx) {
+    if (!value || value->type != SCS_VALUE_TYPE_dplacement) return;
+    const scs_value_dplacement_t &p = value->value_dplacement;
+    TrailerPlacement tp;
+    tp.x = p.position.x;
+    tp.y = p.position.y;
+    tp.z = p.position.z;
+    tp.heading = p.orientation.heading;
+    tp.pitch = p.orientation.pitch;
+    tp.roll = p.orientation.roll;
+    Controller::instance().registry().onTrailerPlacement(static_cast<int>(reinterpret_cast<intptr_t>(ctx)), tp);
+}
+
+SCSAPI_VOID onMultiplayerOffset(const scs_string_t, const scs_u32_t, const scs_value_t *const value,
+                                const scs_context_t) {
+    Controller::instance().setMultiplayerOffset(value && value->type == SCS_VALUE_TYPE_s32 ? value->value_s32.value : 0);
 }
 
 SCSAPI_VOID onSpeed(const scs_string_t, const scs_u32_t, const scs_value_t *const value,
@@ -155,6 +181,9 @@ SCSAPI_RESULT scs_telemetry_init(const scs_u32_t version, const scs_telemetry_in
         return SCS_RESULT_generic_error;
     }
 
+    // Convoy (multiplayer da SCS): offset diferente de 0 -> backend de memoria desligado.
+    p->register_for_channel(SCS_TELEMETRY_CHANNEL_multiplayer_time_offset, SCS_U32_NIL, SCS_VALUE_TYPE_s32,
+                            SCS_TELEMETRY_CHANNEL_FLAG_none, onMultiplayerOffset, nullptr);
     p->register_for_channel(SCS_TELEMETRY_TRUCK_CHANNEL_speed, SCS_U32_NIL, SCS_VALUE_TYPE_float,
                             SCS_TELEMETRY_CHANNEL_FLAG_none, onSpeed, nullptr);
 
@@ -168,6 +197,10 @@ SCSAPI_RESULT scs_telemetry_init(const scs_u32_t version, const scs_telemetry_in
                                     reinterpret_cast<scs_context_t>(static_cast<intptr_t>(i))) == SCS_RESULT_ok) {
             ++registered;
         }
+        // Posicao no mundo: usada para medir a distancia entre engates antes de engatar.
+        std::snprintf(name, sizeof(name), "trailer.%d.world.placement", i);
+        p->register_for_channel(name, SCS_U32_NIL, SCS_VALUE_TYPE_dplacement, SCS_TELEMETRY_CHANNEL_FLAG_none,
+                                onTrailerPlacement, reinterpret_cast<scs_context_t>(static_cast<intptr_t>(i)));
     }
     if (registered == 0) {
         // Versoes antigas so tem um reboque: "trailer.connected".
