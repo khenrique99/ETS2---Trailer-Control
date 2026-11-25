@@ -18,7 +18,8 @@ int keyNameToVk(const std::string &upper) {
         {"LEFT", VK_LEFT},   {"RIGHT", VK_RIGHT}, {"UP", VK_UP},         {"DOWN", VK_DOWN},
         {"HOME", VK_HOME},   {"END", VK_END},     {"INSERT", VK_INSERT}, {"DELETE", VK_DELETE},
         {"PGUP", VK_PRIOR},  {"PGDN", VK_NEXT},   {"SPACE", VK_SPACE},   {"ENTER", VK_RETURN},
-        {"TAB", VK_TAB},     {"BACKSPACE", VK_BACK},
+        {"TAB", VK_TAB},     {"BACKSPACE", VK_BACK}, {"MINUS", VK_OEM_MINUS}, {"-", VK_OEM_MINUS},
+        {"NUMMINUS", VK_SUBTRACT}, {"PLUS", VK_OEM_PLUS}, {"NUMPLUS", VK_ADD},
     };
     if (auto it = named.find(upper); it != named.end()) return it->second;
     if (upper.size() == 1) {
@@ -67,7 +68,17 @@ bool HotkeyListener::add(const std::string &action, const std::string &combo) {
         return false;
     }
     bindings_.push_back(b);
+    // "-" vale tanto no teclado principal quanto no numerico.
+    if (b.vk == VK_OEM_MINUS) {
+        b.vk = VK_SUBTRACT;
+        bindings_.push_back(b);
+    }
     return true;
+}
+
+void HotkeyListener::clear() {
+    stop();
+    bindings_.clear();
 }
 
 void HotkeyListener::start(Callback cb) {

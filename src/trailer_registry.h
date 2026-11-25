@@ -41,6 +41,7 @@ struct Joint {
     int rear = 1;         // indice da unidade de tras
     JointKind kind = JointKind::TruckFifthWheel;
     bool coupled = false;
+    bool fromMemory = false; // estado lido da memoria do jogo (nao da telemetria)
 };
 
 struct CombinationSnapshot {
@@ -48,6 +49,12 @@ struct CombinationSnapshot {
     std::string combinationName; // nome amigavel deduzido
     std::vector<Unit> units;     // [0] = cavalo
     std::vector<Joint> joints;   // articulacoes entre unidades presentes
+};
+
+// Posicao no mundo (canal trailer.N.world.placement). Angulos em fracoes de volta, como no SDK.
+struct TrailerPlacement {
+    double x = 0, y = 0, z = 0;
+    float heading = 0, pitch = 0, roll = 0;
 };
 
 const char *toString(JointKind k);
@@ -63,6 +70,11 @@ public:
     void onTrailerConfig(int trailerIdx, std::map<std::string, std::string> attrs);
     void onTrailerConnected(int trailerIdx, bool connected);
     void onTruckConfig(std::map<std::string, std::string> attrs);
+    void onTrailerHook(int trailerIdx, bool present, float x, float y, float z);
+    void onTrailerPlacement(int trailerIdx, const TrailerPlacement &p);
+
+    // Posicao do reboque e (opcional) do engate dianteiro dele em coordenadas locais.
+    bool trailerGeometry(int trailerIdx, TrailerPlacement &placement, float *frontHookLocal) const;
 
     CombinationSnapshot snapshot() const;
 
@@ -77,6 +89,12 @@ private:
     std::vector<std::string> dollyKeywords_{"dolly"};
     Unit truck_;
     std::array<Unit, kMaxTrailers> trailers_{};
+    struct Geometry {
+        bool hasHook = false, hasPlacement = false;
+        float hook[3] = {0, 0, 0};
+        TrailerPlacement placement;
+    };
+    std::array<Geometry, kMaxTrailers> geometry_{};
     unsigned revision_ = 0;
 };
 

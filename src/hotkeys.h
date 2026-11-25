@@ -17,6 +17,7 @@ public:
     bool add(const std::string &action, const std::string &combo);
     void start(Callback cb);
     void stop();
+    void clear(); // para e remove todos os atalhos
     ~HotkeyListener() { stop(); }
 
 private:

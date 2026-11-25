@@ -1,20 +1,34 @@
 #include "controller.h"
 
+#include "app_launcher.h"
+#include "command_inbox.h"
 #include "input_backend.h"
 #include "log.h"
 #include "memory_backend.h"
+#include "shared/ipc.h"
 #include "status_writer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 namespace tc {
+
+namespace {
+// Intervalo entre consultas ao command.txt.
+constexpr unsigned long long kInboxPollMs = 100;
+} // namespace
 
 Controller &Controller::instance() {
     static Controller inst;
     return inst;
 }
 
+std::wstring Controller::configPath() { return pluginDirectory() + L"\\trailer_control.ini"; }
+
+// Aplica o .ini. Chamado na inicializacao e no comando "recarregar" (vindo da tela de
+// configuracoes do app). Sempre na thread do jogo.
 void Controller::configure(const Config &cfg) {
     requireStopped_ = cfg.getBool("geral", "exigir_parado", true);
     maxSpeedKmh_ = cfg.getDouble("geral", "velocidade_max_kmh", 3.0);
@@ -24,47 +38,182 @@ void Controller::configure(const Config &cfg) {
     // Ordem = preferencia. O backend oficial vem primeiro sempre que suportar.
     backends_ = {&InputBackend::instance(), &MemoryBackend::instance()};
 
-    hotkeys_.add("desengatar_tudo", cfg.get("atalhos", "desengatar_tudo", "CTRL+SHIFT+D"));
-    hotkeys_.add("desengatar_ultimo", cfg.get("atalhos", "desengatar_ultimo", "CTRL+SHIFT+U"));
-    hotkeys_.add("desengatar_selecionado", cfg.get("atalhos", "desengatar_selecionado", "CTRL+SHIFT+X"));
-    hotkeys_.add("engatar_selecionado", cfg.get("atalhos", "engatar_selecionado", "CTRL+SHIFT+E"));
-    hotkeys_.add("selecionar_proximo", cfg.get("atalhos", "selecionar_proximo", "CTRL+SHIFT+RIGHT"));
-    hotkeys_.add("selecionar_anterior", cfg.get("atalhos", "selecionar_anterior", "CTRL+SHIFT+LEFT"));
-    hotkeys_.add("listar", cfg.get("atalhos", "listar", "CTRL+SHIFT+L"));
+    MemoryBackend &mem = MemoryBackend::instance();
+    mem.setRegistry(&registry_);
+    mem.initialize(cfg.getBool("memoria", "habilitado", false), cfg.get("memoria", "versao_jogo"),
+                   cfg.getDouble("memoria", "distancia_max_engate_m", 1.5));
+
+    // Unico atalho: abrir a tela. Todo o resto e feito pela tela.
+    appHotkey_ = cfg.get("atalhos", "abrir_tela", "CTRL+MINUS");
+    const bool restart = hotkeysStarted_;
+    hotkeys_.clear();
+    if (!hotkeys_.add("abrir_tela", appHotkey_)) {
+        log::warn("Atalho para abrir a tela invalido (%s); usando CTRL+MINUS.", appHotkey_.c_str());
+        appHotkey_ = "CTRL+MINUS";
+        hotkeys_.add("abrir_tela", appHotkey_);
+    }
+    if (restart) startHotkeys();
 }
 
 void Controller::startHotkeys() {
+    hotkeysStarted_ = true;
+    // Thread do teclado so enfileira; a tela e aberta no tick (thread do jogo).
     hotkeys_.start([this](const std::string &a) { enqueue(a); });
 }
 
-void Controller::stopHotkeys() { hotkeys_.stop(); }
+void Controller::stopHotkeys() {
+    hotkeysStarted_ = false;
+    hotkeys_.stop();
+}
 
-void Controller::enqueue(const std::string &action) {
+namespace {
+// Acoes que mexem no caminhao: com o jogo pausado (ex.: a tela do app na frente), ficam na
+// fila e rodam quando o jogo voltar.
+bool isCouplingAction(const std::string &line) {
+    const std::string verb = line.substr(0, line.find(' '));
+    return verb == "desengatar" || verb == "engatar" || verb == "desengatar_tudo";
+}
+constexpr unsigned long long kDeferredMaxMs = 30000;
+} // namespace
+
+void Controller::enqueue(const std::string &action, long long seq) {
     std::lock_guard<std::mutex> lock(queueMutex_);
-    if (queue_.size() < 16) queue_.push_back(action);
+    if (queue_.size() < 32) queue_.push_back({action, seq});
+}
+
+CombinationSnapshot Controller::currentSnapshot() const {
+    CombinationSnapshot snap = registry_.snapshot();
+    // Articulacoes internas: a telemetria nao sabe que soltamos; vale o que esta na memoria.
+    const MemoryBackend &mem = MemoryBackend::instance();
+    if (mem.available()) {
+        for (Joint &j : snap.joints) {
+            bool coupled = false;
+            if (j.index >= 1 && mem.probeCoupled(j.index, coupled)) {
+                j.coupled = coupled;
+                j.fromMemory = true;
+            }
+        }
+    }
+    return snap;
+}
+
+void Controller::checkMultiplayer(unsigned long long now) {
+    if (now - lastMultiplayerCheckMs_ < 2000) return;
+    lastMultiplayerCheckMs_ = now;
+    std::string why;
+    if (GetModuleHandleW(L"core_ets2mp.dll") || GetModuleHandleW(L"core_atsmp.dll")) why = "TruckersMP";
+    else if (multiplayerOffset_.load() != 0) why = "Convoy";
+    MemoryBackend::instance().setMultiplayer(why);
 }
 
 void Controller::tick() {
-    std::deque<std::string> pending;
+    const unsigned long long now = GetTickCount64();
+    checkMultiplayer(now);
+    if (now - lastInboxPollMs_ >= kInboxPollMs) {
+        lastInboxPollMs_ = now;
+        // Mesmo seq de novo = reenvio do app (acrescentou num command.txt que ainda nao tinhamos
+        // pego); ignora. So compara com os ultimos vistos: nao depende do relogio do app.
+        for (const ExternalCommand &c : takeExternalCommands()) {
+            if (std::find(recentSeqs_.begin(), recentSeqs_.end(), c.seq) != recentSeqs_.end()) continue;
+            recentSeqs_.push_back(c.seq);
+            if (recentSeqs_.size() > 64) recentSeqs_.pop_front();
+            enqueue(c.action, c.seq);
+        }
+    }
+
+    std::deque<Pending> pending;
+    // Comandos que esperavam o jogo despausar vao na frente.
+    if (!paused_ && !deferred_.empty()) {
+        for (const Deferred &d : deferred_) {
+            if (now - d.since > kDeferredMaxMs) {
+                report("Comando '" + d.cmd.action + "' expirou: o jogo ficou pausado tempo demais.", false);
+                continue;
+            }
+            Pending p = d.cmd;
+            p.seq = -p.seq; // ja respondido como "na fila"; nao reenvia a confirmacao
+            pending.push_back(p);
+        }
+        deferred_.clear();
+    }
     {
         std::lock_guard<std::mutex> lock(queueMutex_);
-        pending.swap(queue_);
+        for (auto &p : queue_) pending.push_back(std::move(p));
+        queue_.clear();
     }
-    for (const auto &a : pending) execute(a);
+    for (const auto &p : pending) {
+        if (paused_ && p.seq > 0 && isCouplingAction(p.action)) {
+            deferred_.push_back({p, now});
+            report("Na fila: '" + p.action + "' sera feito quando voce voltar ao jogo.");
+            lastCommandSeq_ = p.seq;
+            lastCommandResult_ = lastMessage_;
+            lastCommandOk_ = true;
+            lastStatusKey_.clear();
+            continue;
+        }
+        if (p.seq > 0) {
+            lastMessage_.clear();
+            lastOk_ = true;
+        }
+        execute(p.action);
+        if (p.seq > 0) {
+            lastCommandSeq_ = p.seq;
+            lastCommandResult_ = lastMessage_.empty() ? "ok" : lastMessage_;
+            lastCommandOk_ = lastOk_;
+            lastStatusKey_.clear(); // forca regravar
+        }
+    }
 
-    const unsigned rev = registry_.revision();
-    if (rev != lastRevision_ || statusDirty_) {
-        lastRevision_ = rev;
-        statusDirty_ = false;
-        writeStatus(registry_.snapshot(), selectedJoint_, lastMessage_,
-                    MemoryBackend::instance().available());
-    }
+    writeStatusIfNeeded(currentSnapshot());
 }
 
-void Controller::report(const std::string &msg) {
+void Controller::writeStatusIfNeeded(const CombinationSnapshot &snap) {
+    // Chave do que o app ve; muda -> regrava na hora. Sem mudanca -> batimento a cada 1 s.
+    std::string key = std::to_string(registry_.revision()) + "|" + std::to_string(selectedJoint_) + "|" +
+                      std::to_string(paused_.load()) + "|" + lastMessage_ + "|";
+    for (const Joint &j : snap.joints) key += j.coupled ? '1' : '0';
+    key += InputBackend::instance().deviceActive() ? 'a' : 'i';
+    key += std::to_string(deferred_.size());
+
+    const unsigned long long now = GetTickCount64();
+    if (key == lastStatusKey_ && now - lastStatusWriteMs_ < ipc::kHeartbeatMs) return;
+    lastStatusKey_ = key;
+    lastStatusWriteMs_ = now;
+
+    StatusInfo info;
+    info.snap = &snap;
+    info.selectedJoint = selectedJoint_;
+    info.lastMessage = lastMessage_;
+    info.lastOk = lastOk_;
+    info.lastCommandSeq = lastCommandSeq_;
+    info.lastCommandResult = lastCommandResult_;
+    info.lastCommandOk = lastCommandOk_;
+    info.paused = paused_;
+    info.speedKmh = std::fabs(speedMs_.load()) * 3.6;
+    info.requireStopped = requireStopped_;
+    info.maxSpeedKmh = maxSpeedKmh_;
+    info.inputReady = InputBackend::instance().available();
+    info.inputActive = InputBackend::instance().deviceActive();
+    const MemoryBackend &mem = MemoryBackend::instance();
+    info.memoryReady = mem.available();
+    info.memoryStatus = mem.statusText();
+    info.exeVersion = mem.exeVersion();
+    {
+        const std::wstring p = configPath();
+        const int n = WideCharToMultiByte(CP_UTF8, 0, p.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string utf8(n > 0 ? static_cast<size_t>(n - 1) : 0, '\0');
+        if (n > 1) WideCharToMultiByte(CP_UTF8, 0, p.c_str(), -1, &utf8[0], n, nullptr, nullptr);
+        info.configPath = utf8;
+    }
+    info.appHotkey = appHotkey_;
+    info.queuedCommands = deferred_.size();
+    writeStatus(info);
+}
+
+void Controller::report(const std::string &msg, bool ok) {
     lastMessage_ = msg;
-    statusDirty_ = true;
-    log::info("%s", msg.c_str());
+    lastOk_ = ok;
+    if (ok) log::info("%s", msg.c_str());
+    else log::warn("%s", msg.c_str());
 }
 
 bool Controller::checkSpeed() {
@@ -73,7 +222,7 @@ bool Controller::checkSpeed() {
     if (kmh > maxSpeedKmh_) {
         char buf[128];
         std::snprintf(buf, sizeof(buf), "Pare o caminhao (%.1f km/h > %.1f km/h).", kmh, maxSpeedKmh_);
-        report(buf);
+        report(buf, false);
         return false;
     }
     return true;
@@ -86,41 +235,88 @@ ICouplingBackend *Controller::pickBackend(const Joint &j) {
     return nullptr;
 }
 
+namespace {
+std::string withDetail(const std::string &base, ICouplingBackend *b) {
+    if (b != &MemoryBackend::instance()) return base;
+    const std::string &err = MemoryBackend::instance().lastError();
+    return err.empty() ? base : base + " (" + err + ")";
+}
+} // namespace
+
 void Controller::detachJoint(const Joint &j) {
     if (!j.coupled) {
-        report("Articulacao " + std::to_string(j.index) + " ja esta desengatada.");
+        report("Articulacao " + std::to_string(j.index) + " ja esta desengatada.", false);
         return;
     }
     if (!checkSpeed()) return;
     ICouplingBackend *b = pickBackend(j);
     if (!b) {
-        report(std::string("Sem backend para desengatar '") + toString(j.kind) +
-               "' (articulacao " + std::to_string(j.index) + "). Requer backend de memoria.");
+        report(std::string("Sem backend para desengatar '") + toString(j.kind) + "' (articulacao " +
+                   std::to_string(j.index) + "): " + MemoryBackend::instance().statusText() + ".",
+               false);
         return;
     }
     const CouplingResult r = b->detach(j);
-    report(std::string("Desengatar '") + toString(j.kind) + "' via " + b->name() + ": " + toString(r));
+    report(withDetail(std::string("Desengatar '") + toString(j.kind) + "' via " + b->name() + ": " +
+                          toString(r),
+                      b),
+           r == CouplingResult::Requested);
 }
 
 void Controller::attachJoint(const Joint &j) {
     if (j.coupled) {
-        report("Articulacao " + std::to_string(j.index) + " ja esta engatada.");
+        report("Articulacao " + std::to_string(j.index) + " ja esta engatada.", false);
         return;
     }
     if (!checkSpeed()) return;
     ICouplingBackend *b = pickBackend(j);
     if (!b) {
-        report(std::string("Sem backend para engatar '") + toString(j.kind) +
-               "' (articulacao " + std::to_string(j.index) + "). Requer backend de memoria.");
+        report(std::string("Sem backend para engatar '") + toString(j.kind) + "' (articulacao " +
+                   std::to_string(j.index) + "): " + MemoryBackend::instance().statusText() + ".",
+               false);
         return;
     }
     const CouplingResult r = b->attach(j);
-    report(std::string("Engatar '") + toString(j.kind) + "' via " + b->name() + ": " + toString(r));
+    report(withDetail(std::string("Engatar '") + toString(j.kind) + "' via " + b->name() + ": " +
+                          toString(r),
+                      b),
+           r == CouplingResult::Requested);
 }
 
-void Controller::execute(const std::string &action) {
-    if (paused_) return;
-    const CombinationSnapshot snap = registry_.snapshot();
+void Controller::execute(const std::string &actionLine) {
+    // "desengatar 2" -> verbo "desengatar", argumento 2
+    std::string action = actionLine;
+    int arg = -1;
+    const auto space = actionLine.find(' ');
+    if (space != std::string::npos) {
+        action = actionLine.substr(0, space);
+        arg = std::atoi(actionLine.c_str() + space + 1);
+    }
+
+    if (action == "recarregar") {
+        Config cfg;
+        if (!cfg.load(configPath())) {
+            report("Nao consegui ler o trailer_control.ini.", false);
+            return;
+        }
+        configure(cfg);
+        report("Configuracoes aplicadas.");
+        return;
+    }
+    if (action == "abrir_tela") {
+        report(showControlApp());
+        return;
+    }
+    if (action == "diagnostico") {
+        const std::string summary = MemoryBackend::instance().diagnose();
+        report("Diagnostico no game.log.txt: " + summary + ".");
+        return;
+    }
+    if (paused_ && action != "listar" && action != "selecionar") {
+        report("Jogo pausado ou no menu: comando ignorado.", false);
+        return;
+    }
+    const CombinationSnapshot snap = currentSnapshot();
     const int count = static_cast<int>(snap.joints.size());
 
     if (action == "listar") {
@@ -129,38 +325,76 @@ void Controller::execute(const std::string &action) {
         for (const auto &u : snap.units)
             log::info("  unidade %d [%s] %s", u.index, toString(u.kind), u.displayName().c_str());
         for (const auto &j : snap.joints)
-            log::info("  %s articulacao %d: %d<->%d %s - %s", j.index == selectedJoint_ ? ">" : " ",
-                      j.index, j.front, j.rear, toString(j.kind), j.coupled ? "engatada" : "solta");
+            log::info("  %s articulacao %d: %d<->%d %s - %s%s", j.index == selectedJoint_ ? ">" : " ",
+                      j.index, j.front, j.rear, toString(j.kind), j.coupled ? "engatada" : "solta",
+                      j.fromMemory ? " (memoria)" : "");
+        report("Composicao escrita no game.log.txt.");
         return;
     }
 
-    if (action == "selecionar_proximo" || action == "selecionar_anterior") {
-        if (count == 0) { selectedJoint_ = 0; report("Nenhuma articulacao detectada."); return; }
-        selectedJoint_ += (action == "selecionar_proximo") ? 1 : -1;
-        if (selectedJoint_ >= count) selectedJoint_ = 0;
-        if (selectedJoint_ < 0) selectedJoint_ = count - 1;
+    if (action == "selecionar_proximo" || action == "selecionar_anterior" || action == "selecionar") {
+        if (count == 0) {
+            selectedJoint_ = 0;
+            report("Nenhuma articulacao detectada.", false);
+            return;
+        }
+        if (action == "selecionar") {
+            if (arg < 0 || arg >= count) {
+                report("Articulacao " + std::to_string(arg) + " nao existe.", false);
+                return;
+            }
+            selectedJoint_ = arg;
+        } else {
+            selectedJoint_ += (action == "selecionar_proximo") ? 1 : -1;
+            if (selectedJoint_ >= count) selectedJoint_ = 0;
+            if (selectedJoint_ < 0) selectedJoint_ = count - 1;
+        }
         const Joint &j = snap.joints[selectedJoint_];
         report("Selecionada articulacao " + std::to_string(j.index) + ": " + toString(j.kind) + " (" +
                snap.units[j.front].displayName() + " <-> " + snap.units[j.rear].displayName() + ")");
         return;
     }
 
+    if (action == "engatar" && arg == 0 && count == 0) {
+        execute("engatar_selecionado"); // sem reboque: engate nativo pega o que estiver atras
+        return;
+    }
+    if (action == "desengatar" || action == "engatar") {
+        if (arg < 0 || arg >= count) {
+            report("Articulacao " + std::to_string(arg) + " nao existe na composicao atual.", false);
+            return;
+        }
+        selectedJoint_ = arg;
+        if (action == "desengatar") detachJoint(snap.joints[arg]);
+        else attachJoint(snap.joints[arg]);
+        return;
+    }
+
     if (action == "desengatar_tudo") {
-        if (count == 0 || !snap.joints[0].coupled) { report("Nenhum reboque engatado no cavalo."); return; }
+        if (count == 0 || !snap.joints[0].coupled) {
+            report("Nenhum reboque engatado no cavalo.", false);
+            return;
+        }
         detachJoint(snap.joints[0]);
         return;
     }
 
     if (action == "desengatar_ultimo") {
         for (int i = count - 1; i >= 0; --i) {
-            if (snap.joints[i].coupled) { detachJoint(snap.joints[i]); return; }
+            if (snap.joints[i].coupled && pickBackend(snap.joints[i])) {
+                detachJoint(snap.joints[i]);
+                return;
+            }
         }
-        report("Nenhum reboque engatado.");
+        report("Nenhuma articulacao engatada que possa ser solta.", false);
         return;
     }
 
     if (action == "desengatar_selecionado") {
-        if (selectedJoint_ >= count) { report("Articulacao selecionada nao existe mais."); return; }
+        if (selectedJoint_ >= count) {
+            report("Articulacao selecionada nao existe mais.", false);
+            return;
+        }
         detachJoint(snap.joints[selectedJoint_]);
         return;
     }
@@ -181,7 +415,7 @@ void Controller::execute(const std::string &action) {
         return;
     }
 
-    log::warn("Acao desconhecida: %s", action.c_str());
+    report("Acao desconhecida: " + action, false);
 }
 
 } // namespace tc

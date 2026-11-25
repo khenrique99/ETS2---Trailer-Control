@@ -61,7 +61,10 @@ void TrailerRegistry::onTrailerConfig(int idx, std::map<std::string, std::string
     u.present = !attrs.empty() && !attrs["id"].empty();
     u.kind = u.present ? classify(attrs) : UnitKind::Trailer;
     u.attributes = std::move(attrs);
-    if (!u.present) u.connected = false;
+    if (!u.present) {
+        u.connected = false;
+        geometry_[idx] = Geometry{};
+    }
     ++revision_;
 
     if (u.present) {
@@ -87,6 +90,39 @@ void TrailerRegistry::onTruckConfig(std::map<std::string, std::string> attrs) {
     truck_.connected = true;
     truck_.attributes = std::move(attrs);
     ++revision_;
+}
+
+void TrailerRegistry::onTrailerHook(int idx, bool present, float x, float y, float z) {
+    if (idx < 0 || idx >= kMaxTrailers) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    Geometry &g = geometry_[idx];
+    g.hasHook = present;
+    g.hook[0] = x;
+    g.hook[1] = y;
+    g.hook[2] = z;
+}
+
+// Chamado todo frame por reboque: nao mexe na revisao (nao dispara regravacao do status).
+void TrailerRegistry::onTrailerPlacement(int idx, const TrailerPlacement &p) {
+    if (idx < 0 || idx >= kMaxTrailers) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    geometry_[idx].placement = p;
+    geometry_[idx].hasPlacement = true;
+}
+
+bool TrailerRegistry::trailerGeometry(int idx, TrailerPlacement &placement, float *frontHookLocal) const {
+    if (idx < 0 || idx >= kMaxTrailers) return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    const Geometry &g = geometry_[idx];
+    if (!trailers_[idx].present || !g.hasPlacement) return false;
+    if (frontHookLocal) {
+        if (!g.hasHook) return false;
+        frontHookLocal[0] = g.hook[0];
+        frontHookLocal[1] = g.hook[1];
+        frontHookLocal[2] = g.hook[2];
+    }
+    placement = g.placement;
+    return true;
 }
 
 unsigned TrailerRegistry::revision() const {
@@ -134,7 +170,10 @@ CombinationSnapshot TrailerRegistry::snapshot() const {
         j.index = static_cast<int>(i);
         j.front = front.index;
         j.rear = rear.index;
-        j.coupled = rear.connected;
+        // trailer.N.connected diz se o reboque esta preso ao CAVALO (direta ou indiretamente):
+        // ao soltar o conjunto, todos viram false. So vale para a articulacao 0; as internas
+        // o jogo nunca separa sozinho (o estado real delas vem da memoria, quando ativa).
+        j.coupled = (i == 0) ? rear.connected : true;
 
         if (front.kind == UnitKind::Truck)        j.kind = JointKind::TruckFifthWheel;
         else if (rear.kind == UnitKind::Dolly)    j.kind = JointKind::DollyDrawbar;

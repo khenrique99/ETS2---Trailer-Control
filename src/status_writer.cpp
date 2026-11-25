@@ -1,9 +1,8 @@
 #include "status_writer.h"
 
-#include <windows.h>
-#include <shlobj.h>
+#include "shared/ipc.h"
 
-#include <fstream>
+#include <cstdio>
 #include <sstream>
 
 namespace tc {
@@ -28,59 +27,70 @@ std::string esc(const std::string &s) {
     return o;
 }
 
-std::wstring statusPath() {
-    PWSTR docs = nullptr;
-    std::wstring dir;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &docs))) {
-        dir = docs;
-        CoTaskMemFree(docs);
-    } else {
-        return {};
-    }
-    dir += L"\\ETS2TrailerControl";
-    CreateDirectoryW(dir.c_str(), nullptr);
-    return dir + L"\\status.json";
+const char *b(bool v) { return v ? "true" : "false"; }
+
+std::string num(double v) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.2f", v);
+    return buf;
+}
+
+// Qual backend atenderia essa articulacao (o app usa para habilitar os botoes).
+const char *backendFor(const Joint &jt, const StatusInfo &info) {
+    if (jt.index == 0) return info.inputReady ? "entrada" : "nenhum";
+    return info.memoryReady ? "memoria" : "nenhum";
 }
 
 } // namespace
 
-void writeStatus(const CombinationSnapshot &snap, int selectedJoint, const std::string &lastMessage,
-                 bool memoryBackendReady) {
-    const std::wstring path = statusPath();
-    if (path.empty()) return;
+void writeStatus(const StatusInfo &info) {
+    static const std::wstring path = ipc::statusPath();
+    if (path.empty() || !info.snap) return;
+    const CombinationSnapshot &snap = *info.snap;
 
     std::ostringstream j;
     j << "{\n";
+    j << "  \"protocol\": " << ipc::kProtocolVersion << ",\n";
+    j << "  \"plugin_version\": \"" << kPluginVersion << "\",\n";
+    j << "  \"exe_version\": \"" << esc(info.exeVersion) << "\",\n";
+    j << "  \"timestamp_ms\": " << ipc::nowUnixMs() << ",\n";
+    j << "  \"paused\": " << b(info.paused) << ",\n";
+    j << "  \"speed_kmh\": " << num(info.speedKmh) << ",\n";
+    j << "  \"require_stopped\": " << b(info.requireStopped) << ",\n";
+    j << "  \"max_speed_kmh\": " << num(info.maxSpeedKmh) << ",\n";
+    j << "  \"input_backend\": " << b(info.inputReady) << ",\n";
+    j << "  \"input_active\": " << b(info.inputActive) << ",\n";
+    j << "  \"memory_backend\": " << b(info.memoryReady) << ",\n";
+    j << "  \"memory_status\": \"" << esc(info.memoryStatus) << "\",\n";
+    j << "  \"config_path\": \"" << esc(info.configPath) << "\",\n";
+    j << "  \"app_hotkey\": \"" << esc(info.appHotkey) << "\",\n";
+    j << "  \"queued_commands\": " << info.queuedCommands << ",\n";
     j << "  \"combination\": \"" << esc(snap.combinationName) << "\",\n";
     j << "  \"chain_type\": \"" << esc(snap.chainType) << "\",\n";
-    j << "  \"selected_joint\": " << selectedJoint << ",\n";
-    j << "  \"memory_backend\": " << (memoryBackendReady ? "true" : "false") << ",\n";
-    j << "  \"last_message\": \"" << esc(lastMessage) << "\",\n";
+    j << "  \"selected_joint\": " << info.selectedJoint << ",\n";
+    j << "  \"last_message\": \"" << esc(info.lastMessage) << "\",\n";
+    j << "  \"last_ok\": " << b(info.lastOk) << ",\n";
+    j << "  \"last_command\": {\"seq\": " << info.lastCommandSeq << ", \"ok\": " << b(info.lastCommandOk)
+      << ", \"result\": \"" << esc(info.lastCommandResult) << "\"},\n";
     j << "  \"units\": [\n";
     for (size_t i = 0; i < snap.units.size(); ++i) {
         const Unit &u = snap.units[i];
-        j << "    {\"index\": " << u.index << ", \"kind\": \"" << toString(u.kind)
-          << "\", \"name\": \"" << esc(u.displayName()) << "\", \"id\": \"" << esc(u.attr("id"))
-          << "\", \"body\": \"" << esc(u.attr("body.type")) << "\", \"connected\": "
-          << (u.connected ? "true" : "false") << "}" << (i + 1 < snap.units.size() ? "," : "") << "\n";
+        j << "    {\"index\": " << u.index << ", \"kind\": \"" << toString(u.kind) << "\", \"name\": \""
+          << esc(u.displayName()) << "\", \"id\": \"" << esc(u.attr("id")) << "\", \"body\": \""
+          << esc(u.attr("body.type")) << "\", \"connected\": " << b(u.connected) << "}"
+          << (i + 1 < snap.units.size() ? "," : "") << "\n";
     }
     j << "  ],\n  \"joints\": [\n";
     for (size_t i = 0; i < snap.joints.size(); ++i) {
         const Joint &jt = snap.joints[i];
         j << "    {\"index\": " << jt.index << ", \"front\": " << jt.front << ", \"rear\": " << jt.rear
-          << ", \"kind\": \"" << toString(jt.kind) << "\", \"coupled\": "
-          << (jt.coupled ? "true" : "false") << "}" << (i + 1 < snap.joints.size() ? "," : "") << "\n";
+          << ", \"kind\": \"" << toString(jt.kind) << "\", \"coupled\": " << b(jt.coupled)
+          << ", \"source\": \"" << (jt.fromMemory ? "memoria" : "telemetria") << "\", \"backend\": \""
+          << backendFor(jt, info) << "\"}" << (i + 1 < snap.joints.size() ? "," : "") << "\n";
     }
     j << "  ]\n}\n";
 
-    // Grava num temporario e troca, para leitores externos nunca verem arquivo pela metade.
-    const std::wstring tmp = path + L".tmp";
-    {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        if (!out) return;
-        out << j.str();
-    }
-    MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+    ipc::writeAtomic(path, j.str());
 }
 
 } // namespace tc
