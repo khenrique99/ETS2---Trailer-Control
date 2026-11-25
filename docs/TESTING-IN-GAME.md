@@ -1,4 +1,4 @@
-# Trailer Control 0.2.0 — in-game test guide
+# Trailer Control 0.3.0 — in-game test guide
 
 [🇧🇷 Português](TESTE-NO-JOGO.md) · **🇺🇸 English**
 

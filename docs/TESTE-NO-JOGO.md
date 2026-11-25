@@ -1,4 +1,4 @@
-# Trailer Control 0.2.0 — guia de teste no jogo
+# Trailer Control 0.3.0 — guia de teste no jogo
 
 **🇧🇷 Português** · [🇺🇸 English](TESTING-IN-GAME.md)
 

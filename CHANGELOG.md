@@ -4,6 +4,8 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+
+## [0.3.0] - 2026-11-25
 ### Adicionado
 - Alarme sonoro externo da seta (`[som]` no `.ini`): apita junto com cada acendida da luz do
   pisca enquanto houver reboque engatado. Na tela, faixa "Som da seta" com liga/desliga e barra
