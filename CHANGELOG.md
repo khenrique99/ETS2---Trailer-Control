@@ -5,6 +5,44 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+### Adicionado
+- App externo **TrailerControl.exe**: desenho da composição, botão de engate/desengate por
+  articulação, status do jogo, sempre no topo, modo demonstração (`--demo`).
+- Canal de comandos app → plugin (`command.txt`) e `status.json` com batimento, versão do jogo,
+  estado real das articulações e resultado de cada comando (`src/shared/ipc.h`).
+- `MemoryBackend` para o ETS2 **1.62.3.3**: desengate/engate das articulações internas (dolly,
+  bitrem, rodotrem) pelas rotinas do próprio jogo, com checagem de versão, bytes das funções,
+  vtables e chamadas protegidas. Engate só com os engates a até `distancia_max_engate_m`.
+- Estado das articulações internas lido da memória.
+- Diagnóstico da memória (botão no app), só leitura.
+- Atalho único **Ctrl + -** no jogo: abre/mostra a tela (`TrailerControl.exe` na pasta `plugins`);
+  Esc ou Ctrl + - na tela voltam ao jogo.
+- Tela de **Configurações** no app para escolher o atalho que abre a tela (captura a combinação
+  apertada); grava `abrir_tela` no `trailer_control.ini` preservando comentários e o plugin
+  aplica na hora (comando `recarregar`).
+- Comandos de engate dados com o jogo pausado ficam na fila e rodam ao voltar ao jogo.
+- Backend de memória se desliga no multiplayer: TruckersMP (`core_ets2mp.dll` no processo) e
+  Convoy (canal `multiplayer.time.offset` diferente de 0).
+- Documentação em inglês: `README.en.md` e `docs/TESTING-IN-GAME.md`.
+- Release com o zip para extrair direto na pasta `plugins`, os arquivos soltos, pacote de teste
+  e `SHA256SUMS.txt` (`scripts/build.ps1 -GameTag ETS2-1.62`).
+- Testes sem o jogo: `tc_tests` e o "jogo falso" (`fake_game --selftest`) que carrega a DLL real.
+- `scripts/build.ps1`: compila, testa e gera o pacote `dist/TrailerControl-<versão>.zip`.
+- Engenharia reversa do 1.62.3.3 em `docs/re/` e scripts headless do Ghidra em `tools/ghidra/`.
+
+### Corrigido
+- Plugin não compilava contra o SCS SDK real (`scs_input_event_t::value_bool`).
+- Ao soltar o conjunto do cavalo, as articulações internas apareciam como soltas.
+
+### Alterado
+- `[memoria]` no `.ini`: agora `habilitado`, `versao_jogo` (opcional) e
+  `distancia_max_engate_m`; as chaves de assinatura saíram.
+
+### Removido
+- Atalhos de engate/desengate/seleção/listar (`Ctrl+Shift+...`): tudo passou para a tela.
+  `[atalhos]` agora só tem `abrir_tela`.
+
 ## [0.1.0] - 2026-11-24
 ### Adicionado
 - Plugin DLL com SCS Telemetry SDK + Input SDK.
