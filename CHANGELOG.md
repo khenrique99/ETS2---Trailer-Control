@@ -5,6 +5,7 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+
 ## [0.2.0] - 2026-11-25
 ### Adicionado
 - App externo **TrailerControl.exe**: desenho da composição, botão de engate/desengate por
@@ -22,11 +23,12 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
   apertada); grava `abrir_tela` no `trailer_control.ini` preservando comentários e o plugin
   aplica na hora (comando `recarregar`).
 - Comandos de engate dados com o jogo pausado ficam na fila e rodam ao voltar ao jogo.
-- Backend de memória se desliga no multiplayer: TruckersMP (`core_ets2mp.dll` no processo) e
-  Convoy (canal `multiplayer.time.offset` diferente de 0).
+- Backend de memória funciona em single-player e no **Convoy** (multiplayer oficial da SCS,
+  controlado por `[memoria] permitir_convoy`, padrão `1`); no **TruckersMP** se desliga sempre
+  (`core_ets2mp.dll` no processo).
 - Documentação em inglês: `README.en.md` e `docs/TESTING-IN-GAME.md`.
-- Release com o zip para extrair direto na pasta `plugins`, os arquivos soltos, pacote de teste
-  e `SHA256SUMS.txt` (`scripts/build.ps1 -GameTag ETS2-1.62`).
+- Release só com o zip para extrair direto na pasta `plugins` (`scripts/build.ps1 -GameTag ETS2-1.62`;
+  `-TestPackage` gera à parte o pacote com o jogo falso).
 - Testes sem o jogo: `tc_tests` e o "jogo falso" (`fake_game --selftest`) que carrega a DLL real.
 - `scripts/build.ps1`: compila, testa e gera o pacote `dist/TrailerControl-<versão>.zip`.
 - Engenharia reversa do 1.62.3.3 em `docs/re/` e scripts headless do Ghidra em `tools/ghidra/`.

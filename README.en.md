@@ -11,14 +11,12 @@ train, triple, HCT, from the base game and from mods.
 | **Version** | 0.2.0 (experimental) |
 | **Game** | ETS2 **1.62.x** — dolly/B-double uncoupling mapped for **1.62.3.3** |
 | **OS** | Windows 10/11 64-bit |
-| **Mode** | single-player only (internal uncoupling turns itself off in TruckersMP and Convoy) |
+| **Mode** | single-player and **Convoy**; in **TruckersMP** internal uncoupling turns itself off |
 
 ## Download and install
 
 1. Download **`TrailerControl-...-plugins.zip`** from the
-   [Releases](https://github.com/khenrique99/ETS2---Trailer-Control/releases) page
-   (the 3 files are also available individually).
-2. Extract it **into the game's `plugins` folder**:
+   [Releases](https://github.com/khenrique99/ETS2---Trailer-Control/releases) page2. Extract it **into the game's `plugins` folder**:
    `...\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\`
    (create the `plugins` folder if it does not exist). You should end up with
    `trailer_control.dll`, `trailer_control.ini` and `TrailerControl.exe` there.
@@ -60,7 +58,8 @@ live in `trailer_control.ini`, with comments explaining each one.
 | Uncouple/couple **internal joints** (dolly, B-double, road train) | 🧪 **1.62.3.3** only, not yet tested in game |
 | Real state of internal joints (read from memory) | 🧪 same |
 | Shortcut chosen in the window | ✅ tested without the game |
-| Turn internal uncoupling off in multiplayer (TruckersMP / Convoy) | ✅ tested without the game |
+| Internal uncoupling in **Convoy** (`permitir_convoy` in the `.ini`) | 🧪 allowed, tested without the game |
+| Turn internal uncoupling off in **TruckersMP** | ✅ tested without the game |
 
 ### How internal uncoupling works
 
@@ -76,7 +75,7 @@ in Portuguese):
 
 Safety: it only turns on if the exe version is exactly a mapped one, the first bytes of each
 function match and every trailer's vtable points to the expected functions; every read and call is
-exception-guarded; it turns off in multiplayer. On any failure that part switches off and the rest
+exception-guarded; it turns off in TruckersMP. On any failure that part switches off and the rest
 keeps working. After a game update (1.62.4, 1.63…) internal uncoupling stays unavailable until
 the table for the new version is added.
 
@@ -94,8 +93,9 @@ Requirements: Visual Studio 2022 or Build Tools (C++ desktop); CMake comes with 
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-Output in `dist\`: the zip for the `plugins` folder, the loose files, `SHA256SUMS.txt` and the
-test package. Without the SDK, CMake builds only the window.
+Output in `dist\`: only the zip for the `plugins` folder (what goes into the release). With
+`-TestPackage` it also builds `build\...-teste.zip` (plugin + fake game). Without the SDK, CMake
+builds only the window.
 
 ### Tests (no game needed)
 

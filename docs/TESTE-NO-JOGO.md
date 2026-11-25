@@ -7,8 +7,8 @@ verdade). O que falta confirmar é o comportamento dentro do ETS2 — principalm
 do dolly / bitrem, que mexe na memória do jogo. Se puder, rode o roteiro abaixo e conte o
 resultado.
 
-> **Antes de começar:** salve o jogo. O desengate interno só liga no ETS2 **1.62.3.3** e só em
-> single-player; em outra versão, no TruckersMP ou no Convoy ele se desliga sozinho e só o
+> **Antes de começar:** salve o jogo. O desengate interno só liga no ETS2 **1.62.3.3**, em
+> single-player ou no **Convoy**; em outra versão ou no TruckersMP ele se desliga sozinho e só o
 > desengate do cavalo funciona.
 
 ## Arquivos
@@ -18,7 +18,6 @@ resultado.
 | `trailer_control.dll` | o plugin |
 | `trailer_control.ini` | configurações (o atalho dá para trocar pela tela) |
 | `TrailerControl.exe` | a tela de engate — o atalho no jogo abre ela |
-| `fake_game.exe` (pacote de teste) | opcional: testa plugin + tela sem abrir o ETS2 (veja o fim) |
 
 ## 1. Instalar
 
@@ -61,7 +60,7 @@ resultado.
 | 11 | Ande um pouco, pare e tente **Engatar** a 1 com os reboques afastados | A tela recusa: "engates a X m (maximo 1.50 m)" | |
 | 12 | Num bitrem, faça o mesmo com a articulação 1 | Igual aos passos 9–10 | |
 | 13 | Em **Configurações**, troque o atalho (ex.: Ctrl + F9), salve, volte ao jogo e use o atalho novo | A tela abre com o atalho novo; o cabeçalho mostra "Esc ou Ctrl + F9" | |
-| 14 | (Opcional) Entre num comboio **Convoy** | As articulações internas ficam "indisponível: desligado no multiplayer (Convoy)" | |
+| 14 | (Opcional) Num comboio **Convoy**, repita os passos 9–10 | Funciona igual; anote como os outros jogadores veem o reboque solto | |
 
 Anote também o que **não** for esperado: reboque que "pula", física estranha, travamento,
 reboque sumindo, aviso na entrega da carga, tela que não aparece por cima do jogo etc.
@@ -84,9 +83,10 @@ Abra uma [issue](https://github.com/khenrique99/ETS2---Trailer-Control/issues) c
 - **Ctrl + - não abre a tela:** confira se o `TrailerControl.exe` está na pasta `plugins` junto da
   DLL. Dá para abrir o exe direto também; ele conecta sozinho. Se outra coisa do jogo usa
   Ctrl + -, troque o atalho em Configurações.
+- **Não quer o desengate interno no Convoy:** `permitir_convoy = 0` em `[memoria]` no `.ini`.
 - **Tela fica em "Aguardando o jogo":** a DLL está em `bin\win_x64\plugins`? Aceitou o aviso de SDK?
 - **Articulações internas "indisponível":** a mensagem ao lado diz o motivo (versão diferente,
-  bytes do exe não conferem, multiplayer, desligado no `.ini`).
+  bytes do exe não conferem, TruckersMP, desligado no `.ini`).
 - **Engatar recusado mesmo com os reboques encostados:** aumente `distancia_max_engate_m` no
   `.ini` (ou `0` para não checar) e informe o valor que a tela mostrou.
 - **"Não consegui gravar" ao salvar Configurações:** a pasta do jogo está protegida; abra o
@@ -94,7 +94,8 @@ Abra uma [issue](https://github.com/khenrique99/ETS2---Trailer-Control/issues) c
 
 ## 6. Teste sem o jogo (opcional)
 
-Baixe o pacote de teste da release (`...-teste.zip`), extraia e, em PowerShell, na pasta dele:
+Para quem compila o projeto: `scripts\build.ps1 -TestPackage` gera `build\...-teste.zip`. Extraia e,
+em PowerShell, na pasta dele:
 
 ```powershell
 .\teste-sem-jogo\fake_game.exe .\plugin\trailer_control.dll 60

@@ -11,14 +11,12 @@ rodotrês, HCT, do jogo original e de mods.
 | **Versão** | 0.2.0 (experimental) |
 | **Jogo** | ETS2 **1.62.x** — desengate de dolly/bitrem mapeado para **1.62.3.3** |
 | **Sistema** | Windows 10/11 64 bits |
-| **Modo** | só single-player (o desengate interno se desliga sozinho no TruckersMP e no Convoy) |
+| **Modo** | single-player e **Convoy**; no **TruckersMP** o desengate interno se desliga sozinho |
 
 ## Download e instalação
 
 1. Baixe **`TrailerControl-...-plugins.zip`** na página de
-   [Releases](https://github.com/khenrique99/ETS2---Trailer-Control/releases)
-   (os 3 arquivos também estão lá soltos, se preferir).
-2. Extraia o conteúdo **dentro da pasta `plugins`** do jogo:
+   [Releases](https://github.com/khenrique99/ETS2---Trailer-Control/releases)2. Extraia o conteúdo **dentro da pasta `plugins`** do jogo:
    `...\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\`
    (crie a pasta `plugins` se ela não existir). Devem ficar lá:
    `trailer_control.dll`, `trailer_control.ini` e `TrailerControl.exe`.
@@ -57,7 +55,8 @@ identificam dolly de mod) ficam no `trailer_control.ini`, com comentários expli
 | Desengatar/engatar **articulações internas** (dolly, bitrem, rodotrem) | 🧪 só **1.62.3.3**, falta testar no jogo |
 | Estado real das articulações internas (lido da memória) | 🧪 idem |
 | Atalho configurável pela tela | ✅ testado sem o jogo |
-| Desligar o desengate interno no multiplayer (TruckersMP / Convoy) | ✅ testado sem o jogo |
+| Desengate interno no **Convoy** (`permitir_convoy` no `.ini`) | 🧪 liberado, testado sem o jogo |
+| Desligar o desengate interno no **TruckersMP** | ✅ testado sem o jogo |
 
 ### Como funciona o desengate interno
 
@@ -73,7 +72,7 @@ jogo, achadas por engenharia reversa do `eurotrucks2.exe` 1.62.3.3
 
 Travas: só liga se a versão do exe for exatamente uma das mapeadas, se os bytes de cada função
 conferirem e se a vtable de cada reboque apontar para as funções esperadas; toda leitura e chamada
-é protegida contra exceções; desliga no multiplayer. Em qualquer falha, essa parte se desliga e o
+é protegida contra exceções; desliga no TruckersMP. Em qualquer falha, essa parte se desliga e o
 resto continua funcionando. Num update do jogo (1.62.4, 1.63…), o desengate interno fica
 indisponível até a tabela da versão nova ser adicionada.
 
@@ -91,8 +90,8 @@ Requisitos: Visual Studio 2022 ou Build Tools (C++ desktop); o CMake vem junto.
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-Saída em `dist\`: o zip para a pasta `plugins`, os arquivos soltos, `SHA256SUMS.txt` e o pacote
-de teste. Sem o SDK, o CMake compila só a tela.
+Saída em `dist\`: só o zip para a pasta `plugins` (o que vai na release). Com `-TestPackage`,
+gera também `build\...-teste.zip` (plugin + jogo falso). Sem o SDK, o CMake compila só a tela.
 
 ### Testes (sem o jogo)
 
@@ -113,7 +112,7 @@ e `command.txt` (tela → plugin). Protocolo em [src/shared/ipc.h](src/shared/ip
 src/
   plugin.cpp            entradas scs_telemetry_* e scs_input_*
   trailer_registry.*    estado do cavalo/reboques, classificação, articulações, posições
-  controller.*          fila de comandos, seleção, trava de velocidade, multiplayer
+  controller.*          fila de comandos, seleção, trava de velocidade, TruckersMP/Convoy
   input_backend.*       dispositivo virtual -> controle nativo de engate (articulação 0)
   memory_backend.*      articulações internas via memória do jogo (tabela por versão)
   command_inbox.*       lê command.txt da tela

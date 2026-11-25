@@ -70,6 +70,7 @@ private:
     std::atomic<bool> paused_{true};
     std::atomic<int> multiplayerOffset_{0};
     unsigned long long lastMultiplayerCheckMs_ = 0;
+    bool allowConvoy_ = true;
 
     bool requireStopped_ = true;
     double maxSpeedKmh_ = 3.0;

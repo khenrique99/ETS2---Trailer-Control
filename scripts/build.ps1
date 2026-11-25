@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-    Compila plugin + app, roda os testes e gera os arquivos da release em dist\.
+    Compila plugin + app, roda os testes e gera o zip da release em dist\ (so os 3 arquivos da pasta plugins).
 .DESCRIPTION
     Precisa do Visual Studio 2022 (ou Build Tools) com C++ e do SCS SDK em .\sdk.
-    Uso:  powershell -ExecutionPolicy Bypass -File scripts\build.ps1 [-SkipTests] [-GameTag ETS2-1.62]
+    Uso:  powershell -ExecutionPolicy Bypass -File scripts\build.ps1 [-SkipTests] [-GameTag ETS2-1.62] [-TestPackage]
+    -TestPackage tambem gera build\...-teste.zip (plugin + jogo falso), fora da release.
     GameTag vai no nome dos arquivos: a versao do jogo para a qual a release foi feita.
 #>
-param([switch]$SkipTests, [string]$GameTag = 'ETS2-1.62')
+param([switch]$SkipTests, [string]$GameTag = 'ETS2-1.62', [switch]$TestPackage)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -45,31 +46,23 @@ $dist = Join-Path $root 'dist'
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
 New-Item -ItemType Directory -Force $dist | Out-Null
 
-# 1) Os 3 arquivos que vao na pasta plugins do jogo (o app fica junto da DLL: o atalho abre ele de la)
+# O que vai para a release: so o zip com os 3 arquivos da pasta plugins do jogo
+# (o app fica junto da DLL: o atalho no jogo abre ele de la).
 $pluginFiles = @("$rel\trailer_control.dll", "$root\config\trailer_control.ini", "$rel\TrailerControl.exe")
+Compress-Archive -Path $pluginFiles -DestinationPath (Join-Path $dist "$base-plugins.zip")
 
-# 2) Zip para extrair direto dentro de ...\bin\win_x64\plugins
-$plugins = Join-Path $dist "$base-plugins.zip"
-Compress-Archive -Path $pluginFiles -DestinationPath $plugins
-
-# 3) Os mesmos arquivos soltos, para quem prefere baixar um por um
-foreach ($f in $pluginFiles) { Copy-Item $f $dist }
-
-# 4) Pacote de teste: plugin + jogo falso + guias (PT e EN)
-$stage = Join-Path $root "build\stage\$base-teste"
-if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
-New-Item -ItemType Directory -Force "$stage\plugin", "$stage\teste-sem-jogo" | Out-Null
-Copy-Item $pluginFiles "$stage\plugin\"
-Copy-Item "$rel\fake_game.exe" "$stage\teste-sem-jogo\"
-Copy-Item "$root\docs\TESTE-NO-JOGO.md" "$stage\LEIA-ME.md"
-Copy-Item "$root\docs\TESTING-IN-GAME.md" "$stage\README-EN.md"
-Compress-Archive -Path "$stage\*" -DestinationPath (Join-Path $dist "$base-teste.zip")
-
-# 5) Somas SHA-256 de tudo que vai para a release
-$sums = Get-ChildItem $dist -File | Sort-Object Name | ForEach-Object {
-    '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+# Opcional, para desenvolvimento: plugin + jogo falso + guias (fora da release)
+if ($TestPackage) {
+    $stage = Join-Path $root "build\stage\$base-teste"
+    if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+    New-Item -ItemType Directory -Force "$stage\plugin", "$stage\teste-sem-jogo" | Out-Null
+    Copy-Item $pluginFiles "$stage\plugin\"
+    Copy-Item "$rel\fake_game.exe", "$rel\core_ets2mp.dll" "$stage\teste-sem-jogo\"
+    Copy-Item "$root\docs\TESTE-NO-JOGO.md" "$stage\LEIA-ME.md"
+    Copy-Item "$root\docs\TESTING-IN-GAME.md" "$stage\README-EN.md"
+    Compress-Archive -Path "$stage\*" -DestinationPath (Join-Path $root "build\$base-teste.zip") -Force
+    Write-Host "Pacote de teste: build\$base-teste.zip"
 }
-[IO.File]::WriteAllText((Join-Path $dist 'SHA256SUMS.txt'), ($sums -join "`n") + "`n")
 
 Write-Host "Release em $dist :"
 Get-ChildItem $dist -File | ForEach-Object { Write-Host ("  {0,-48} {1,10:N0} bytes" -f $_.Name, $_.Length) }
