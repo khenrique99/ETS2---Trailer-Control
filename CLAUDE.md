@@ -156,36 +156,36 @@ Status: `[ ]` a fazer, `[~]` em andamento, `[x]` feito. Atualizar aqui a cada en
 - [x] Estrutura CMake, plugin com telemetria + input, detecção de reboques
 - [x] Branches `main`/`dev`, regras, script de promoção
 - [x] `CHANGELOG.md`
-- [ ] Alvo `tests/` com doctest + testes do registry, config e parser AOB
+- [~] Alvo `tests/` (v0.2: `tc_tests` com mini-framework próprio + `fake_game --selftest`, o "jogo falso" que carrega a DLL real). Falta: migrar para doctest e cobrir registry/AOB
 - [ ] GitHub Actions: build Windows x64 + testes (SDK baixado no CI, não versionado)
 - [ ] Validar no jogo: nomes dos canais `trailer.N.connected`, atributos de config,
       controle semântico `trailer`; corrigir o que divergir
 
 ### Fase 1 — Mapeamento (engenharia reversa, só leitura)
 Objetivo: entender como o jogo representa a corrente de reboques.
-- [ ] **RE-1** Ponto de entrada: o próprio despachante de telemetria do exe lê o estado de
+- [x] **RE-1** (v0.2, estático — `docs/re/structures-1.62.3.3.md`) Ponto de entrada: o próprio despachante de telemetria do exe lê o estado de
       cada reboque para preencher `trailer.N.*`. Achar a string `"connected"`/o código que
       escreve o canal → chegar ao objeto do cavalo e à lista de reboques.
-- [ ] **RE-2** Estrutura da corrente: cavalo → reboque 0 → (dolly) → reboque 1 …
+- [~] **RE-2** (mapeado estático: caminhão+0x1580 → reboque+0x1058 …; falta validar no jogo) Estrutura da corrente: cavalo → reboque 0 → (dolly) → reboque 1 …
       Mapear no ReClass: ponteiro "próximo reboque", ponteiro "reboque anterior/trator",
       flag de engatado, objeto da junta física (hook/fifth wheel), posição do engate.
 - [ ] **RE-3** Diferenciar tipos de engate na estrutura (quinta roda × lança/drawbar) e
       confirmar como o dolly aparece (unidade própria na corrente?).
-- [ ] **RE-4** Documentar tudo em `docs/re/structures.md` com offsets por versão.
-- [ ] Implementar `MemoryReader` seguro (`safeRead<T>`, validação de ponteiro) e um
+- [x] **RE-4** Documentar tudo em `docs/re/structures.md` com offsets por versão.
+- [x] (v0.2: leituras com SEH + `MemoryBackend::diagnose`, botão Diagnóstico) Implementar `MemoryReader` seguro (`safeRead<T>`, validação de ponteiro) e um
       comando de debug que despeja a corrente lida da memória no log, comparando com a
       telemetria (as duas visões precisam bater).
 
 ### Fase 2 — Desengate de qualquer articulação
-- [ ] **RE-5** Rotina nativa de desengate: partir da ação do controle "trailer" (ou de um
+- [x] **RE-5** (estático: vt[0x318] do reboque físico) Rotina nativa de desengate: partir da ação do controle "trailer" (ou de um
       breakpoint de escrita na flag de engatado ao apertar T) até a função que desfaz a
       junta. Registrar assinatura AOB, convenção de chamada e parâmetros.
-- [ ] **RE-6** Verificar se a mesma rotina aceita uma junta intermediária
+- [~] **RE-6** (estático: a rotina age no reboque de trás de qualquer articulação; falta validar no jogo) Verificar se a mesma rotina aceita uma junta intermediária
       (reboque 0 ↔ dolly, dolly ↔ reboque 1, bitrem). Se não, achar a rotina da junta
       do reboque (a que o jogo usa ao montar/desmontar composições) ou reproduzir a
       sequência: remover junta física → atualizar ponteiros da corrente → baixar pés de
       apoio / aplicar freio no reboque solto → notificar telemetria/UI.
-- [ ] `MemoryBackend::detach(joint)` chamando a rotina na thread do jogo, com validação
+- [~] (implementado na v0.2, não testado no jogo) `MemoryBackend::detach(joint)` chamando a rotina na thread do jogo, com validação
       pré/pós (a telemetria precisa refletir a mudança no frame seguinte).
 - [ ] Reboque solto fica estável (pés de apoio, freio, sem cair/explodir física).
 - [ ] Ações: desengatar tudo, último, selecionado — funcionando em todas as composições da matriz.
@@ -194,20 +194,20 @@ Objetivo: entender como o jogo representa a corrente de reboques.
 - [ ] **RE-7** Rotina nativa de engate e sua checagem de proximidade (distância/ângulo).
 - [ ] Busca do reboque solto mais próximo de cada engate livre (posições via
       `trailer.N.world.placement` + `hook.position`, ou via memória para reboques fora da corrente).
-- [ ] Engatar reboque/dolly atrás de um reboque (não só no cavalo), respeitando tipo de
+- [~] (v0.2: re-engate interno com checagem de distância; não testado no jogo) Engatar reboque/dolly atrás de um reboque (não só no cavalo), respeitando tipo de
       engate compatível (quinta roda × lança).
 - [ ] Feedback quando não houver nada compatível ao alcance.
 
 ### Fase 4 — Robustez
-- [ ] Assinaturas por versão em `signatures/<versao>.ini` + ferramenta para validar uma
+- [ ] (v0.2 ainda usa a tabela `kLayouts` no código, contra a regra 2.3) Assinaturas por versão em `signatures/<versao>.ini` + ferramenta para validar uma
       versão nova (relatório de quais padrões resolveram)
-- [ ] Desativar backend de memória em multiplayer (TruckersMP/Convoy)
+- [x] Desativar backend de memória em multiplayer (TruckersMP/Convoy) — v0.2
 - [ ] Comportamento com save/load, trabalho (entrega de carga) com parte da composição
       solta, reboques próprios (trailer ownership)
-- [ ] Guarda SEH em todas as chamadas internas; nenhum crash do jogo é aceitável
+- [~] (v0.2: SEH em leituras e chamadas; falta prova no jogo) Guarda SEH em todas as chamadas internas; nenhum crash do jogo é aceitável
 
 ### Fase 5 — Interface
-- [ ] Overlay in-game (D3D11 hook ou app externo lendo `status.json`) mostrando a
+- [x] (v0.2: app externo TrailerControl.exe, aberto pelo atalho Ctrl + -) Overlay in-game (D3D11 hook ou app externo lendo `status.json`) mostrando a
       composição, articulação selecionada e estado
 - [ ] Mensagens no HUD do jogo, se houver rotina reutilizável
 
