@@ -18,7 +18,6 @@ resultado.
 | `trailer_control.dll` | o plugin |
 | `trailer_control.ini` | configurações (o atalho dá para trocar pela tela) |
 | `TrailerControl.exe` | a tela de engate — o atalho no jogo abre ela |
-| `fake_game.exe` (pacote de teste) | opcional: testa plugin + tela sem abrir o ETS2 (veja o fim) |
 
 ## 1. Instalar
 
@@ -95,7 +94,8 @@ Abra uma [issue](https://github.com/khenrique99/ETS2---Trailer-Control/issues) c
 
 ## 6. Teste sem o jogo (opcional)
 
-Baixe o pacote de teste da release (`...-teste.zip`), extraia e, em PowerShell, na pasta dele:
+Para quem compila o projeto: `scripts\build.ps1 -TestPackage` gera `build\...-teste.zip`. Extraia e,
+em PowerShell, na pasta dele:
 
 ```powershell
 .\teste-sem-jogo\fake_game.exe .\plugin\trailer_control.dll 60

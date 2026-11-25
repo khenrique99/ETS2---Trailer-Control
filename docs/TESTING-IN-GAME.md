@@ -22,7 +22,6 @@ back.
 | `trailer_control.dll` | the plugin |
 | `trailer_control.ini` | settings (the shortcut can be changed from the window) |
 | `TrailerControl.exe` | the coupling window — the in-game shortcut opens it |
-| `fake_game.exe` (test package) | optional: tests plugin + window without ETS2 (see the end) |
 
 ## 1. Install
 
@@ -99,7 +98,8 @@ Open an [issue](https://github.com/khenrique99/ETS2---Trailer-Control/issues) wi
 
 ## 6. Testing without the game (optional)
 
-Download the release's test package (`...-teste.zip`), extract it and, in PowerShell inside it:
+For those building the project: `scripts\build.ps1 -TestPackage` creates `build\...-teste.zip`.
+Extract it and, in PowerShell inside it:
 
 ```powershell
 .\teste-sem-jogo\fake_game.exe .\plugin\trailer_control.dll 60

@@ -16,9 +16,7 @@ rodotrês, HCT, do jogo original e de mods.
 ## Download e instalação
 
 1. Baixe **`TrailerControl-...-plugins.zip`** na página de
-   [Releases](https://github.com/khenrique99/ETS2---Trailer-Control/releases)
-   (os 3 arquivos também estão lá soltos, se preferir).
-2. Extraia o conteúdo **dentro da pasta `plugins`** do jogo:
+   [Releases](https://github.com/khenrique99/ETS2---Trailer-Control/releases)2. Extraia o conteúdo **dentro da pasta `plugins`** do jogo:
    `...\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\`
    (crie a pasta `plugins` se ela não existir). Devem ficar lá:
    `trailer_control.dll`, `trailer_control.ini` e `TrailerControl.exe`.
@@ -92,8 +90,8 @@ Requisitos: Visual Studio 2022 ou Build Tools (C++ desktop); o CMake vem junto.
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-Saída em `dist\`: o zip para a pasta `plugins`, os arquivos soltos, `SHA256SUMS.txt` e o pacote
-de teste. Sem o SDK, o CMake compila só a tela.
+Saída em `dist\`: só o zip para a pasta `plugins` (o que vai na release). Com `-TestPackage`,
+gera também `build\...-teste.zip` (plugin + jogo falso). Sem o SDK, o CMake compila só a tela.
 
 ### Testes (sem o jogo)
 

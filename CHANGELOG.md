@@ -27,8 +27,8 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
   controlado por `[memoria] permitir_convoy`, padrão `1`); no **TruckersMP** se desliga sempre
   (`core_ets2mp.dll` no processo).
 - Documentação em inglês: `README.en.md` e `docs/TESTING-IN-GAME.md`.
-- Release com o zip para extrair direto na pasta `plugins`, os arquivos soltos, pacote de teste
-  e `SHA256SUMS.txt` (`scripts/build.ps1 -GameTag ETS2-1.62`).
+- Release só com o zip para extrair direto na pasta `plugins` (`scripts/build.ps1 -GameTag ETS2-1.62`;
+  `-TestPackage` gera à parte o pacote com o jogo falso).
 - Testes sem o jogo: `tc_tests` e o "jogo falso" (`fake_game --selftest`) que carrega a DLL real.
 - `scripts/build.ps1`: compila, testa e gera o pacote `dist/TrailerControl-<versão>.zip`.
 - Engenharia reversa do 1.62.3.3 em `docs/re/` e scripts headless do Ghidra em `tools/ghidra/`.
