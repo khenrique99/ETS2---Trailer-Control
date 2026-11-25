@@ -50,8 +50,9 @@ SemVer. `0.x` enquanto o backend de memória for experimental. Atualizar `CHANGE
 (seção `Unreleased`) em todo PR para a `dev`.
 
 ### 1.5 Segurança e escopo
-- O backend de memória **só roda em single-player**. Detectar TruckersMP / Convoy
-  multiplayer e desativar (risco de banimento e de dessincronização).
+- O backend de memória roda em single-player e no **Convoy** (multiplayer oficial da SCS;
+  pode ser desligado com `[memoria] permitir_convoy = 0`). **Nunca** no TruckersMP: detectar
+  (`core_ets2mp.dll` no processo) e desativar — risco de banimento.
 - Nunca versionar binários do jogo, dumps, bancos do IDA/Ghidra, tabelas do Cheat Engine
   ou trechos de código descompilado do jogo (`re/local/` é ignorado pelo git). Documentar
   achados com offsets, assinaturas e descrições em `docs/re/`.
@@ -201,7 +202,8 @@ Objetivo: entender como o jogo representa a corrente de reboques.
 ### Fase 4 — Robustez
 - [ ] (v0.2 ainda usa a tabela `kLayouts` no código, contra a regra 2.3) Assinaturas por versão em `signatures/<versao>.ini` + ferramenta para validar uma
       versão nova (relatório de quais padrões resolveram)
-- [x] Desativar backend de memória em multiplayer (TruckersMP/Convoy) — v0.2
+- [x] Desativar backend de memória no TruckersMP — v0.2; Convoy liberado (`permitir_convoy`) — v0.2
+- [ ] Validar o desengate interno no Convoy (como os outros jogadores veem o reboque solto)
 - [ ] Comportamento com save/load, trabalho (entrega de carga) com parte da composição
       solta, reboques próprios (trailer ownership)
 - [~] (v0.2: SEH em leituras e chamadas; falta prova no jogo) Guarda SEH em todas as chamadas internas; nenhum crash do jogo é aceitável
