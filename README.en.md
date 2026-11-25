@@ -119,7 +119,7 @@ and `command.txt` (window → plugin). Protocol in [src/shared/ipc.h](src/shared
 
 ## License
 
-[MIT](LICENSE) © 2026 Kelvin Henrique Ferreira.
+© 2026 Kelvin Henrique Ferreira, under the [PolyForm Noncommercial 1.0.0](LICENSE): personal and non-commercial use is free; **selling it or using it commercially is not allowed** without the author's permission.
 
 ## Disclaimer
 

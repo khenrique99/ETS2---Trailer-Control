@@ -12,7 +12,8 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
   Testado sem o jogo (lógica, geração do som e status); falta ouvir no jogo.
 - O plugin vigia o `trailer_control.ini` e recarrega sozinho em até 1 s quando ele muda (edição
   à mão ou pela tela), sem precisar reiniciar o jogo nem mandar comando.
-- `LICENSE` (MIT) em nome de Kelvin Henrique Ferreira.
+- `LICENSE` (PolyForm Noncommercial 1.0.0, a mesma do Airbrake) em nome de Kelvin Henrique
+  Ferreira: uso pessoal e não comercial liberado; uso comercial só com autorização do autor.
 
 
 ## [0.2.0] - 2026-11-25
