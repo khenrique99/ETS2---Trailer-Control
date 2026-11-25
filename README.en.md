@@ -8,7 +8,7 @@ train, triple, HCT, from the base game and from mods.
 
 | | |
 |---|---|
-| **Version** | 0.2.0 (experimental) |
+| **Version** | 0.3.0 (experimental) |
 | **Game** | ETS2 **1.62.x** — dolly/B-double uncoupling mapped for **1.62.3.3** |
 | **OS** | Windows 10/11 64-bit |
 | **Mode** | single-player and **Convoy**; in **TruckersMP** internal uncoupling turns itself off |
