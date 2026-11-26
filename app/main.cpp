@@ -532,7 +532,8 @@ void paintJoints(Graphics &gr, const RectF &card) {
 
     std::wstring blockedWhy;
     const bool blocked = commandsBlocked(&blockedWhy);
-    const float rowH = S(54);
+    const float maxRowH = S(54);
+    const float rowH = std::min(maxRowH, (card.Height - S(54)) / static_cast<float>(s.joints.size()));
     float y = card.Y + S(42);
     for (const JointView &j : s.joints) {
         if (y + rowH > card.Y + card.Height - S(6)) break;
@@ -553,7 +554,13 @@ void paintJoints(Graphics &gr, const RectF &card) {
         const float tx = row.X + S(50);
         const float btnW = S(124), chipW = S(112);
         const float textW = row.Width - (tx - row.X) - btnW - chipW - S(36);
-        text(gr, niceKind(j.kind), RectF(tx, row.Y + S(5), textW, S(22)), S(14), P.text, true);
+        const bool compact = rowH < S(52);
+        const float titleY = compact ? S(3) : S(5);
+        const float titleH = compact ? S(19) : S(22);
+        const float detailY = compact ? S(22) : S(26);
+        const float detailH = compact ? S(17) : S(20);
+        const float detailFont = compact ? S(11.5f) : S(12);
+        text(gr, niceKind(j.kind), RectF(tx, row.Y + titleY, textW, titleH), compact ? S(13) : S(14), P.text, true);
 
         std::wstring sub = unitLabel(j.front) + L"  ↔  " + unitLabel(j.rear);
         const bool noBackend = j.backend == L"nenhum";
@@ -569,15 +576,18 @@ void paintJoints(Graphics &gr, const RectF &card) {
         } else if (j.fromMemory) {
             sub += L"   ·   estado lido da memória";
         }
-        text(gr, sub, RectF(tx, row.Y + S(26), textW, S(20)), S(12), subColor);
+        text(gr, sub, RectF(tx, row.Y + detailY, textW, detailH), detailFont, subColor);
 
-        const RectF chipR(row.X + row.Width - btnW - chipW - S(22), row.Y + (row.Height - S(26)) / 2, chipW, S(26));
+        const float chipH = compact ? S(24) : S(26);
+        const RectF chipR(row.X + row.Width - btnW - chipW - S(22), row.Y + (row.Height - chipH) / 2, chipW, chipH);
         if (pend) chip(gr, chipR, L"Enviando…", P.amber, P.amberSoft);
         else if (j.coupled) chip(gr, chipR, L"Engatada", P.green, P.greenSoft);
         else chip(gr, chipR, L"Solta", P.red, P.redSoft);
 
-        const bool enabled = !blocked && !noBackend && !pend;
-        const RectF btn(row.X + row.Width - btnW - S(10), row.Y + (row.Height - S(34)) / 2, btnW, S(34));
+        const bool inputUnavailable = j.index == 0 && !s.inputActive && !g.source->isDemo();
+        const bool enabled = !blocked && !noBackend && !inputUnavailable && !pend;
+        const float btnH = compact ? S(30) : S(34);
+        const RectF btn(row.X + row.Width - btnW - S(10), row.Y + (row.Height - btnH) / 2, btnW, btnH);
         button(gr, btn, j.coupled ? L"Desengatar" : L"Engatar", kHitRowAction + j.index, enabled,
                j.coupled ? BtnStyle::Danger : BtnStyle::Primary);
         y += rowH;
@@ -718,6 +728,11 @@ void onClick(int id) {
 
 void onTimer() {
     bool changed = g.source->poll(g.state);
+    if (!g.state.joints.empty() && g.state.selectedJoint >= 0 &&
+        g.state.selectedJoint < static_cast<int>(g.state.joints.size()) && g.selected != g.state.selectedJoint) {
+        g.selected = g.state.selectedJoint;
+        changed = true;
+    }
     if (!g.state.configPath.empty() && g.state.configPath != g.prefs.lastConfigPath) {
         g.prefs.lastConfigPath = g.state.configPath; // lembra para configurar com o jogo fechado
         g.prefs.save();

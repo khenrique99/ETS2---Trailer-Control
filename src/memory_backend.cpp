@@ -240,11 +240,10 @@ std::uintptr_t MemoryBackend::trailerObject(int chainIndex) const {
         if (!safeReadPtr(t + layout_->offTrailerNext, t) || !plausible(t)) return 0;
     }
     // Confere a vtable: so aceita objetos cujas rotinas de engate sao as esperadas.
-    std::uintptr_t vt = 0, fnConnect = 0, fnDisconnect = 0;
+    std::uintptr_t vt = 0, fnDisconnect = 0;
     if (!safeReadPtr(t, vt) || !plausible(vt)) return 0;
-    if (!safeReadPtr(vt + layout_->vtSlotConnect, fnConnect)) return 0;
     if (!safeReadPtr(vt + layout_->vtSlotDisconnect, fnDisconnect)) return 0;
-    if (fnConnect != base_ + layout_->rvaConnect || fnDisconnect != base_ + layout_->rvaDisconnect) return 0;
+    if (fnDisconnect != base_ + layout_->rvaDisconnect) return 0;
     return t;
 }
 
@@ -309,12 +308,16 @@ std::string MemoryBackend::diagnose() const {
     for (int i = 0; okFirst && i < kMaxTrailers; ++i) {
         std::uintptr_t vt = 0, c = 0, d = 0, master = 0, next = 0;
         safeReadPtr(t, vt);
-        const bool vtOk = plausible(vt) && safeReadPtr(vt + l->vtSlotConnect, c) &&
-                          safeReadPtr(vt + l->vtSlotDisconnect, d) && c == base_ + l->rvaConnect &&
+        safeReadPtr(vt + l->vtSlotConnect, c);
+        const bool vtOk = plausible(vt) && safeReadPtr(vt + l->vtSlotDisconnect, d) &&
                           d == base_ + l->rvaDisconnect;
         safeReadPtr(t + l->offTrailerMaster, master);
-        log::info("reboque %d = %s vtable %s (rva %llx) %s, mestre %s", i, hex(t).c_str(), hex(vt).c_str(),
-                  static_cast<unsigned long long>(vt - base_), vtOk ? "OK" : "NAO CONFERE", hex(master).c_str());
+        log::info("reboque %d = %s vtable %s (rva %llx) conectar %s (rva %llx), desconectar %s (rva %llx) %s, mestre %s",
+                  i, hex(t).c_str(), hex(vt).c_str(),
+                  static_cast<unsigned long long>(vt - base_),
+                  hex(c).c_str(), static_cast<unsigned long long>(c ? c - base_ : 0),
+                  hex(d).c_str(), static_cast<unsigned long long>(d ? d - base_ : 0),
+                  vtOk ? "OK" : "NAO CONFERE", hex(master).c_str());
         ++count;
         if (vtOk) ++okVt;
         if (!safeReadPtr(t + l->offTrailerNext, next) || !plausible(next)) break;

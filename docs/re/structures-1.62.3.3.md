@@ -57,7 +57,7 @@ gravam o ponteiro (`VtableStarts.java`). Em `0x1422f8b88..0x1422f8c00` há 5 vta
 |---|---|---|
 | `+0x310` | `FUN_140774710(this, master, posEngate, int, bool teleporta, bool)` | **engatar**: `this+0x1050 = master`, cria junta física tipo 7 no mundo (`DAT_143714fb0+0x2d90`, vt+0x70) e guarda em `this+0xfb0`; no fim chama `FUN_140775050(this)` p/ engatar o próprio reboque de trás |
 | `+0x318` | `FUN_140775290(this)` | **desengatar**: destrói a junta `+0xfb0` (mundo vt+0xa0), reseta estado de toda a cadeia atrás, `this+0x1050 = 0` |
-| `+0x328` | `FUN_140775360(this, bool)` | liga/desliga partes visuais do engate |
+| `+0x328` | `FUN_140775360(this, bool)` | altera componentes visuais; efeito sobre cabos/mangueiras não confirmado, chamada não usada pelo plugin |
 
 Campos do reboque físico:
 

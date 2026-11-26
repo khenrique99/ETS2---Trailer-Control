@@ -37,12 +37,12 @@ bool InputBackend::registerDevice(const scs_input_init_params_v100_t &params,
         // Dispositivo semantico: o nome da entrada E o nome do controle no controls.sii,
         // entao funciona sem o jogador precisar mapear nada.
         g_inputs[0].name = semanticalName_.c_str();
-        g_inputs[0].display_name = "Engatar / Desengatar reboque";
+        g_inputs[0].display_name = "Couple Uncouple Trailer";
     } else {
         // Dispositivo generico: aparece em Opcoes > Controles como
         // "Trailer Control" e o jogador associa o botao a "Engatar/Desengatar reboque".
         g_inputs[0].name = "trailer_toggle";
-        g_inputs[0].display_name = "Engatar / Desengatar reboque";
+        g_inputs[0].display_name = "Couple Uncouple Trailer";
     }
     g_inputs[0].value_type = SCS_VALUE_TYPE_bool;
 
