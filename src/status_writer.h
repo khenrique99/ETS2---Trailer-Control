@@ -5,7 +5,7 @@
 
 namespace tc {
 
-constexpr const char *kPluginVersion = "0.3.0";
+constexpr const char *kPluginVersion = "0.3.1";
 
 struct StatusInfo {
     const CombinationSnapshot *snap = nullptr;
