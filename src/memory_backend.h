@@ -1,5 +1,6 @@
 #pragma once
 #include "coupling_backend.h"
+#include "trailer_registry.h"
 
 #include <cstdint>
 #include <string>
@@ -61,6 +62,12 @@ private:
 
     std::uintptr_t trailerObject(int chainIndex) const; // 0 = 1o reboque; 0 se invalido
     bool hookDistance(int jointIndex, std::uintptr_t master, double &meters) const;
+    bool hasHoses(std::uintptr_t vehicle) const;
+    int chainFrom(std::uintptr_t first, std::uintptr_t *out, int max) const;
+    void rebuildHoses(std::uintptr_t master, std::uintptr_t slave, bool masterHadHoses, bool pairConnected);
+
+    // Articulacao k tinha mangueiras antes de soltar (para recriar ao engatar).
+    bool hosesWereOn_[kMaxTrailers + 1] = {};
 
     const Layout *layout_ = nullptr;
     const TrailerRegistry *registry_ = nullptr;

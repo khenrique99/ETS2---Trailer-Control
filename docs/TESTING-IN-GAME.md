@@ -1,4 +1,4 @@
-# Trailer Control 0.3.0 — in-game test guide
+# Trailer Control 0.3.1 — in-game test guide
 
 [🇧🇷 Português](TESTE-NO-JOGO.md) · **🇺🇸 English**
 
@@ -69,6 +69,8 @@ back.
 | 17 | With no trailer coupled, turn the signal on | No beep | |
 | 18 | Drag the volume bar (0–100) | A preview beep plays; the signal beep changes volume right away; 0 = muted | |
 | 19 | Edit `volume` under `[som]` in the `.ini` while the game is running | Applies within 1 s, no restart | |
+| 20 | Uncouple an internal joint (dolly/B-double) and look at the hoses between trailers | The hoses leave the loose trailer (they hang from the front one); they come back when you couple again | |
+| 21 | With the joint loose, drive the truck far away (hundreds of meters) | The game does not close; if it does, note the distance and send `game.log.txt` | |
 
 Also note anything **unexpected**: trailer "jumping", weird physics, freezes, trailers
 disappearing, warnings when delivering the cargo, the window not showing over the game, etc.

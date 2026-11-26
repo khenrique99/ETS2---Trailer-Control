@@ -1,4 +1,4 @@
-# Trailer Control 0.3.0 — guia de teste no jogo
+# Trailer Control 0.3.1 — guia de teste no jogo
 
 **🇧🇷 Português** · [🇺🇸 English](TESTING-IN-GAME.md)
 
@@ -66,6 +66,8 @@ resultado.
 | 17 | Sem reboque engatado, ligue a seta | Sem apito | |
 | 18 | Arraste a barra de volume (0–100) | Toca uma prévia; o apito da seta muda de volume na hora; 0 = mudo | |
 | 19 | Edite `volume` em `[som]` no `.ini` com o jogo aberto | Vale em até 1 s, sem reiniciar | |
+| 20 | Desengatar uma articulação interna (dolly/bitrem) e olhar as mangueiras entre os reboques | As mangueiras somem do reboque solto (ficam penduradas no da frente); ao engatar de novo voltam | |
+| 21 | Com a articulação solta, dirigir o caminhão para longe (centenas de metros) | O jogo não fecha; se fechar, anote a distância e envie o `game.log.txt` | |
 
 Anote também o que **não** for esperado: reboque que "pula", física estranha, travamento,
 reboque sumindo, aviso na entrega da carga, tela que não aparece por cima do jogo etc.

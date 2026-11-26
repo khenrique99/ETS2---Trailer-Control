@@ -8,7 +8,7 @@ rodotrês, HCT, do jogo original e de mods.
 
 | | |
 |---|---|
-| **Versão** | 0.3.0 (experimental) |
+| **Versão** | 0.3.1 (experimental) |
 | **Jogo** | ETS2 **1.62.x** — desengate de dolly/bitrem mapeado para **1.62.3.3** |
 | **Sistema** | Windows 10/11 64 bits |
 | **Modo** | single-player e **Convoy**; no **TruckersMP** o desengate interno se desliga sozinho |

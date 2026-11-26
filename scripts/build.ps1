@@ -28,7 +28,9 @@ if (-not (Test-Path "$root\sdk\include\scssdk_telemetry.h")) {
     throw 'SCS SDK nao encontrado em .\sdk (veja o README).'
 }
 
-& $cmake -S $root -B "$root\build" -G 'Visual Studio 17 2022' -A x64 | Out-Host
+$vsEdition = & $vswhere -latest -products * -property installationPath
+$generator = if ($vsEdition -match 'Microsoft Visual Studio\\18') { 'Visual Studio 18 2026' } else { 'Visual Studio 17 2022' }
+& $cmake -S $root -B "$root\build" -G $generator -A x64 | Out-Host
 if ($LASTEXITCODE) { throw 'Falha ao configurar' }
 & $cmake --build "$root\build" --config Release | Out-Host
 if ($LASTEXITCODE) { throw 'Falha ao compilar' }

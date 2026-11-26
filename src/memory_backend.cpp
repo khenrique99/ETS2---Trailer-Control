@@ -28,6 +28,7 @@ struct MemoryBackend::Layout {
     std::uint32_t offTruckFirstTrailer; // caminhao -> 1o reboque fisico
     std::uint32_t offTrailerNext;     // reboque -> reboque de tras (owner_ptr, nunca escrever)
     std::uint32_t offTrailerMaster;   // reboque -> mestre fisico (0 = solto)
+    std::uint32_t offHoseCount;       // veiculo -> quantidade de mangueiras (cabos) que ele segura
 
     std::uint32_t vtSlotConnect;      // vtable do reboque: engatar(this, master, pos, ...)
     std::uint32_t vtSlotDisconnect;   // vtable do reboque: desengatar(this)
@@ -35,12 +36,16 @@ struct MemoryBackend::Layout {
     std::uint32_t rvaDisconnect;      // alvo esperado de vtSlotDisconnect
     std::uint32_t rvaReconnectSlave;  // void f(reboque_mestre): engata o reboque de tras nele
     std::uint32_t rvaSlaveHookPos;    // float* f(reboque, float out[3]): engate traseiro (local)
+    std::uint32_t rvaClearHoses;      // void f(frente, tras): remove as mangueiras da frente e apaga as visuais
+    std::uint32_t rvaBuildHoses;      // void f(frente, tras): cria as mangueiras frente -> tras (tras = 0: repouso)
 
     // Primeiros bytes de cada funcao, conferidos antes de ativar.
     unsigned char sigConnect[16];
     unsigned char sigDisconnect[16];
     unsigned char sigReconnectSlave[16];
     unsigned char sigSlaveHookPos[16];
+    unsigned char sigClearHoses[16];
+    unsigned char sigBuildHoses[16];
 };
 
 namespace {
@@ -72,6 +77,17 @@ using HookPosCall = float *(__fastcall *)(std::uintptr_t self, float *out);
 bool safeCall(std::uintptr_t fn, std::uintptr_t self) {
     __try {
         reinterpret_cast<ThisCall>(fn)(self);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+using PairCall = void(__fastcall *)(std::uintptr_t front, std::uintptr_t rear);
+
+bool safeCallPair(std::uintptr_t fn, std::uintptr_t front, std::uintptr_t rear) {
+    __try {
+        reinterpret_cast<PairCall>(fn)(front, rear);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -213,6 +229,8 @@ bool MemoryBackend::initialize(bool enabled, const std::string &expectedVersion,
         {layout_->rvaDisconnect, layout_->sigDisconnect, "desengatar"},
         {layout_->rvaReconnectSlave, layout_->sigReconnectSlave, "reconectar"},
         {layout_->rvaSlaveHookPos, layout_->sigSlaveHookPos, "posicao do engate"},
+        {layout_->rvaClearHoses, layout_->sigClearHoses, "remover mangueiras"},
+        {layout_->rvaBuildHoses, layout_->sigBuildHoses, "criar mangueiras"},
     };
     for (const auto &c : checks) {
         if (!safeCompare(base_ + c.rva, c.sig, 16)) {
@@ -240,11 +258,10 @@ std::uintptr_t MemoryBackend::trailerObject(int chainIndex) const {
         if (!safeReadPtr(t + layout_->offTrailerNext, t) || !plausible(t)) return 0;
     }
     // Confere a vtable: so aceita objetos cujas rotinas de engate sao as esperadas.
-    std::uintptr_t vt = 0, fnConnect = 0, fnDisconnect = 0;
+    std::uintptr_t vt = 0, fnDisconnect = 0;
     if (!safeReadPtr(t, vt) || !plausible(vt)) return 0;
-    if (!safeReadPtr(vt + layout_->vtSlotConnect, fnConnect)) return 0;
     if (!safeReadPtr(vt + layout_->vtSlotDisconnect, fnDisconnect)) return 0;
-    if (fnConnect != base_ + layout_->rvaConnect || fnDisconnect != base_ + layout_->rvaDisconnect) return 0;
+    if (fnDisconnect != base_ + layout_->rvaDisconnect) return 0;
     return t;
 }
 
@@ -309,12 +326,16 @@ std::string MemoryBackend::diagnose() const {
     for (int i = 0; okFirst && i < kMaxTrailers; ++i) {
         std::uintptr_t vt = 0, c = 0, d = 0, master = 0, next = 0;
         safeReadPtr(t, vt);
-        const bool vtOk = plausible(vt) && safeReadPtr(vt + l->vtSlotConnect, c) &&
-                          safeReadPtr(vt + l->vtSlotDisconnect, d) && c == base_ + l->rvaConnect &&
+        safeReadPtr(vt + l->vtSlotConnect, c);
+        const bool vtOk = plausible(vt) && safeReadPtr(vt + l->vtSlotDisconnect, d) &&
                           d == base_ + l->rvaDisconnect;
         safeReadPtr(t + l->offTrailerMaster, master);
-        log::info("reboque %d = %s vtable %s (rva %llx) %s, mestre %s", i, hex(t).c_str(), hex(vt).c_str(),
-                  static_cast<unsigned long long>(vt - base_), vtOk ? "OK" : "NAO CONFERE", hex(master).c_str());
+        log::info("reboque %d = %s vtable %s (rva %llx) conectar %s (rva %llx), desconectar %s (rva %llx) %s, mestre %s",
+                  i, hex(t).c_str(), hex(vt).c_str(),
+                  static_cast<unsigned long long>(vt - base_),
+                  hex(c).c_str(), static_cast<unsigned long long>(c ? c - base_ : 0),
+                  hex(d).c_str(), static_cast<unsigned long long>(d ? d - base_ : 0),
+                  vtOk ? "OK" : "NAO CONFERE", hex(master).c_str());
         ++count;
         if (vtOk) ++okVt;
         if (!safeReadPtr(t + l->offTrailerNext, next) || !plausible(next)) break;
@@ -341,6 +362,54 @@ bool MemoryBackend::hookDistance(int jointIndex, std::uintptr_t master, double &
     return std::isfinite(meters);
 }
 
+bool MemoryBackend::hasHoses(std::uintptr_t vehicle) const {
+    std::uintptr_t count = 0;
+    return safeReadPtr(vehicle + layout_->offHoseCount, count) && count != 0 && count < 64;
+}
+
+// Trecho da cadeia a partir de `first` (inclusive) ate o ultimo reboque; devolve quantos.
+int MemoryBackend::chainFrom(std::uintptr_t first, std::uintptr_t *out, int max) const {
+    int n = 0;
+    std::uintptr_t t = first;
+    while (n < max && plausible(t)) {
+        out[n++] = t;
+        if (!safeReadPtr(t + layout_->offTrailerNext, t)) break;
+    }
+    return n;
+}
+
+// Mesma sequencia que o jogo faz ao soltar/engatar o reboque do cavalo (FUN_1405dbd20 /
+// FUN_1405db530): apaga as mangueiras da frente e recria as dos pares que continuam
+// ligados. So refaz onde ja havia mangueira, assim respeita a opcao de cabos do jogo.
+void MemoryBackend::rebuildHoses(std::uintptr_t master, std::uintptr_t slave, bool masterHadHoses,
+                                 bool pairConnected) {
+    std::uintptr_t chain[kMaxTrailers];
+    const int n = chainFrom(slave, chain, kMaxTrailers);
+    if (n == 0) return;
+    bool downstream[kMaxTrailers] = {};
+    bool any = masterHadHoses;
+    for (int i = 0; i + 1 < n; ++i) {
+        downstream[i] = hasHoses(chain[i]);
+        any = any || downstream[i];
+    }
+    if (!any) return;
+
+    // Apaga: cabos fisicos da frente + visual "cables_off" do reboque e dos de tras.
+    if (!safeCallPair(base_ + layout_->rvaClearHoses, master, slave)) {
+        log::error("Backend de memoria: excecao ao remover as mangueiras.");
+        return;
+    }
+    bool ok = true;
+    for (int i = 0; i + 1 < n; ++i) {
+        if (downstream[i]) ok = safeCallPair(base_ + layout_->rvaBuildHoses, chain[i], chain[i + 1]) && ok;
+    }
+    if (masterHadHoses) {
+        // Engatado: mangueira do mestre vai para o reboque. Solto: pendura na posicao de repouso.
+        ok = safeCallPair(base_ + layout_->rvaBuildHoses, master, pairConnected ? slave : 0) && ok;
+    }
+    if (!ok) log::error("Backend de memoria: excecao ao recriar as mangueiras.");
+}
+
 CouplingResult MemoryBackend::detach(const Joint &joint) {
     lastError_.clear();
     if (!available()) return CouplingResult::Unavailable;
@@ -362,6 +431,13 @@ CouplingResult MemoryBackend::detach(const Joint &joint) {
         lastError_ = "excecao ao chamar a rotina de desengate";
         log::error("Backend de memoria: excecao ao desengatar articulacao %d.", joint.index);
         return CouplingResult::Unavailable;
+    }
+    // Sem isto as mangueiras continuam presas ao reboque solto e esticam quando o caminhao se afasta.
+    const std::uintptr_t front = trailerObject(joint.index - 1);
+    if (front) {
+        const bool had = hasHoses(front);
+        hosesWereOn_[joint.index] = had;
+        rebuildHoses(front, slave, had, false);
     }
     log::info("Backend de memoria: articulacao %d desengatada (reboque %p).", joint.index,
               reinterpret_cast<void *>(slave));
@@ -404,6 +480,7 @@ CouplingResult MemoryBackend::attach(const Joint &joint) {
         log::error("Backend de memoria: excecao ao engatar articulacao %d.", joint.index);
         return CouplingResult::Unavailable;
     }
+    rebuildHoses(master, slave, hosesWereOn_[joint.index] || hasHoses(master), true);
     log::info("Backend de memoria: articulacao %d engatada.", joint.index);
     return CouplingResult::Requested;
 }
@@ -419,17 +496,22 @@ const MemoryBackend::Layout kLayouts[] = {
         0x1580,    // caminhao -> 1o reboque
         0x1058,    // reboque -> reboque de tras
         0x1050,    // reboque -> mestre
+        0xea0,     // veiculo -> contagem do array de mangueiras (+0xe90)
         0x310, 0x318,
         0x774710, // FUN_140774710 engatar
         0x775290, // FUN_140775290 desengatar
         0x775050, // FUN_140775050 reconectar reboque de tras
         0x774ef0, // FUN_140774ef0 posicao do engate traseiro
+        0x866440, // FUN_140866440 remover mangueiras
+        0x865600, // FUN_140865600 criar mangueiras
         {0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x18, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56},
         {0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x30, 0x48, 0x8b, 0x05, 0x0f, 0xfd, 0xf9},
         {0x40, 0x53, 0x48, 0x83, 0xec, 0x60, 0x48, 0x83, 0xb9, 0x58, 0x10, 0x00, 0x00, 0x00, 0x48, 0x8b},
         {0x4c, 0x8b, 0xdc, 0x49, 0x89, 0x5b, 0x10, 0x49, 0x89, 0x73, 0x18, 0x57, 0x48, 0x81, 0xec, 0xb0},
+        {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xec, 0x40, 0x48},
+        {0x48, 0x89, 0x4c, 0x24, 0x08, 0x55, 0x53, 0x41, 0x55, 0x41, 0x56, 0x48, 0x8d, 0xac, 0x24, 0x78},
     },
-    {nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, {}, {}, {}},
+    {nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, {}, {}, {}, {}, {}},
 };
 
 const MemoryBackend::Layout *knownLayouts() { return kLayouts; }

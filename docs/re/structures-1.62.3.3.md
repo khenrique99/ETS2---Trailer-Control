@@ -57,7 +57,7 @@ gravam o ponteiro (`VtableStarts.java`). Em `0x1422f8b88..0x1422f8c00` há 5 vta
 |---|---|---|
 | `+0x310` | `FUN_140774710(this, master, posEngate, int, bool teleporta, bool)` | **engatar**: `this+0x1050 = master`, cria junta física tipo 7 no mundo (`DAT_143714fb0+0x2d90`, vt+0x70) e guarda em `this+0xfb0`; no fim chama `FUN_140775050(this)` p/ engatar o próprio reboque de trás |
 | `+0x318` | `FUN_140775290(this)` | **desengatar**: destrói a junta `+0xfb0` (mundo vt+0xa0), reseta estado de toda a cadeia atrás, `this+0x1050 = 0` |
-| `+0x328` | `FUN_140775360(this, bool)` | liga/desliga partes visuais do engate |
+| `+0x328` | `FUN_140775360(this, bool)` | altera componentes visuais; efeito sobre cabos/mangueiras não confirmado, chamada não usada pelo plugin |
 
 Campos do reboque físico:
 
@@ -75,6 +75,31 @@ O desengate do cavalo (`FUN_1405dbd20`) usa o mesmo `vt[0x318]` no reboque.
 `FUN_14062ad80` / `FUN_14062abf0` criam o reboque de trás a partir da definição
 (`param_2[0x37]`) e gravam em `+0x1058` — só na **criação** da composição. O jogo **não tem**
 rotina de desmontar a cadeia em tempo de execução: os reboques internos nunca são soltos.
+
+## Mangueiras (cabos de ar/elétrica) — análise estática, não testada no jogo
+
+Tokens SCS decodificados (base 38) lidos do exe: `brace_on`/`brace_off` (pés de apoio, alternados
+por `vt[0x328]`), `cables_on`/`cables_off`, `f_body`, `trlr_cables`. Ou seja, **`vt[0x328]` é o
+pé de apoio, não a mangueira**; a mangueira são as sub-partes `cables_on`/`cables_off` do modelo
++ objetos de cabo físico guardados no veículo da frente.
+
+| Endereço | Papel |
+|---|---|
+| `FUN_140866440(frente, tras)` | apaga os cabos físicos da frente (`FUN_140864b40`, `FUN_1408652a0`, array em `frente+0xe90`); marca `cables_off`/desmarca `cables_on` em `tras.f_body` e na `trlr_cables` da frente; **recursivo**: repete para `(tras, tras+0x1058)`. Com `tras == 0` só limpa a frente (sem recursão) |
+| `FUN_140865600(frente, tras)` | cria os cabos da acessória `trlr_cables` da frente até os locators de `tras` (visual `cables_on`); com `tras == 0` cria os cabos pendurados na posição de repouso |
+| `FUN_140865580(frente, tras, ?, modo, idx)` | `modo` vem da convar `g_trailer_cables_mode`: 0 nada, 1 só o par frente→tras, 2–4 percorre toda a cadeia chamando `FUN_140865600` por par |
+
+O jogo, ao soltar o reboque do cavalo (`FUN_1405dbd20`, `FUN_1405dc350`, `FUN_1405dfe20`), faz:
+`FUN_1406420b0(caminhao,0,0)` (zera `truck+0x1580` e solta os 12 cabos do caminhao em
+`truck+0x1090..`), depois `FUN_140866440(caminhao, reboque)` e `FUN_140865580(caminhao, 0)`.
+Ao engatar: `FUN_140866440` + `FUN_140865580(caminhao, reboque)`.
+
+Nosso desengate interno só chamava `vt[0x318]` do reboque de trás: os cabos do reboque da frente
+ficavam presos ao reboque solto. Hipótese (não confirmada) para o fechamento do jogo ao se afastar:
+cabo esticado por centenas de metros. Correção (Unreleased): depois do `vt[0x318]`,
+`FUN_140866440(mestre, escravo)` + `FUN_140865600(par, par+1)` para cada par que continua ligado
+atrás + `FUN_140865600(mestre, 0)` (cabo em repouso). No engate, o inverso (`FUN_140865600(mestre,
+escravo)`). `+0xea0` do veículo é a contagem do array de cabos (só refaz onde já havia cabo).
 
 ## Plano para o MemoryBackend (hipótese)
 

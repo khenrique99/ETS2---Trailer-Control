@@ -5,6 +5,13 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-26
+### Corrigido
+- Desengate de articulação interna (dolly, bitrem, rodotrem) agora remove as mangueiras entre os
+  dois reboques, como o jogo faz ao soltar a carreta do cavalo; ao engatar de novo, recria.
+  Pode corrigir o fechamento do jogo ao se afastar do reboque solto (mangueira esticada) —
+  **não testado no jogo**; a causa do crash é hipótese. Análise em `docs/re/structures-1.62.3.3.md`.
+
 ## [0.3.0] - 2026-11-25
 ### Adicionado
 - Alarme sonoro externo da seta (`[som]` no `.ini`): apita junto com cada acendida da luz do
