@@ -48,9 +48,9 @@ $dist = Join-Path $root 'dist'
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
 New-Item -ItemType Directory -Force $dist | Out-Null
 
-# O que vai para a release: so o zip com os 3 arquivos da pasta plugins do jogo
+# O que vai para a release: so o zip com os arquivos da pasta plugins do jogo
 # (o app fica junto da DLL: o atalho no jogo abre ele de la).
-$pluginFiles = @("$rel\trailer_control.dll", "$root\config\trailer_control.ini", "$rel\TrailerControl.exe")
+$pluginFiles = @("$rel\trailer_control.dll", "$root\config\trailer_control.ini", "$rel\TrailerControl.exe", "$root\THIRD-PARTY-NOTICES.txt")
 Compress-Archive -Path $pluginFiles -DestinationPath (Join-Path $dist "$base-plugins.zip")
 
 # Opcional, para desenvolvimento: plugin + jogo falso + guias (fora da release)

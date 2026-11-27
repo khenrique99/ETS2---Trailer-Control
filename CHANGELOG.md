@@ -4,6 +4,21 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+
+## [0.4.0-beta.1] - 2026-11-27
+### Adicionado
+- **Painel dentro do jogo** (beta): o atalho (Ctrl + -) agora abre o painel por cima da imagem do
+  ETS2, sem tirar o jogo de primeiro plano. Desenhado com Dear ImGui (MIT) por um desvio no
+  `Present` do DirectX 11 (vtable do `dxgi.dll`; nenhum código do exe do jogo é alterado). Com ele
+  aberto, mouse e teclado vão só para o painel; Esc/Fechar/atalho fecham; setas e Enter são a
+  alternativa ao mouse. Mesmo visual e funções do app externo (composição, articulações, engatar/
+  desengatar, som da seta e volume, diagnóstico).
+- `[tela] modo = jogo | externo` no `.ini`. Se o desvio não instalar (jogo fora do DX11, erro), o
+  plugin usa o app externo sozinho. Desligado no TruckersMP.
+- Teste `fake_game --overlay`: janela DX11 de verdade, abre o painel, tira foto, clica e confere o
+  comando. Testado **só com o jogo falso**; falta o ETS2 de verdade.
+- `THIRD-PARTY-NOTICES.txt` (licença do Dear ImGui) junto da release.
+
 ### Corrigido
 - Fechamento do jogo ao soltar uma 2ª articulação com a 1ª já solta e longe: o plugin recriava a
   mangueira entre reboques já separados (cabo de dezenas de metros). Agora só liga o par que
