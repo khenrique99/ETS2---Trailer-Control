@@ -6,6 +6,7 @@
 #include "input_backend.h"
 #include "log.h"
 #include "memory_backend.h"
+#include "overlay/overlay.h"
 #include "shared/ipc.h"
 #include "status_writer.h"
 
@@ -46,6 +47,8 @@ void Controller::configure(const Config &cfg) {
     mem.initialize(cfg.getBool("memoria", "habilitado", false), cfg.get("memoria", "versao_jogo"),
                    cfg.getDouble("memoria", "distancia_max_engate_m", 1.5));
     allowConvoy_ = cfg.getBool("memoria", "permitir_convoy", true);
+    // [tela] modo = jogo (painel dentro do jogo, padrao) | externo (TrailerControl.exe)
+    Overlay::instance().configure(toLower(cfg.get("tela", "modo", "jogo")) != "externo");
     lastMultiplayerCheckMs_ = 0; // reavalia ja no proximo tick
 
     BlinkerSound::instance().configure(cfg.getBool("som", "alarme_seta", true),
@@ -65,8 +68,15 @@ void Controller::configure(const Config &cfg) {
 
 void Controller::startHotkeys() {
     hotkeysStarted_ = true;
-    // Thread do teclado so enfileira; a tela e aberta no tick (thread do jogo).
-    hotkeys_.start([this](const std::string &a) { enqueue(a); });
+    // Thread do teclado so enfileira; o app externo e aberto no tick (thread do jogo). O painel
+    // dentro do jogo abre/fecha na hora (so troca uma flag), mesmo com o jogo pausado.
+    hotkeys_.start([this](const std::string &a) {
+        if (a == "abrir_tela" && Overlay::instance().active()) {
+            Overlay::instance().toggle();
+            return;
+        }
+        enqueue(a);
+    });
 }
 
 void Controller::stopHotkeys() {
@@ -204,6 +214,16 @@ void Controller::tick() {
     // "Qualquer reboque": basta ter algo engatado no cavalo.
     BlinkerSound::instance().update(paused_, !snap.joints.empty() && snap.joints[0].coupled);
     writeStatusIfNeeded(snap);
+
+    // Painel dentro do jogo: copia por valor, porque ele desenha em outra thread.
+    if (Overlay::instance().isOpen()) {
+        OverlayState st;
+        st.snap = snap;
+        st.info = buildStatusInfo(snap);
+        st.info.snap = nullptr;
+        st.stamp = now;
+        Overlay::instance().publish(std::move(st));
+    }
 }
 
 void Controller::writeStatusIfNeeded(const CombinationSnapshot &snap) {
@@ -221,6 +241,10 @@ void Controller::writeStatusIfNeeded(const CombinationSnapshot &snap) {
     lastStatusKey_ = key;
     lastStatusWriteMs_ = now;
 
+    writeStatus(buildStatusInfo(snap));
+}
+
+StatusInfo Controller::buildStatusInfo(const CombinationSnapshot &snap) const {
     StatusInfo info;
     info.snap = &snap;
     info.selectedJoint = selectedJoint_;
@@ -250,7 +274,7 @@ void Controller::writeStatusIfNeeded(const CombinationSnapshot &snap) {
     info.queuedCommands = deferred_.size();
     info.blinkerSound = BlinkerSound::instance().enabled();
     info.blinkerVolume = BlinkerSound::instance().volume();
-    writeStatus(info);
+    return info;
 }
 
 void Controller::report(const std::string &msg, bool ok) {
@@ -346,6 +370,10 @@ void Controller::execute(const std::string &actionLine) {
         return;
     }
     if (action == "abrir_tela") {
+        if (Overlay::instance().active()) {
+            Overlay::instance().toggle();
+            return;
+        }
         report(showControlApp());
         return;
     }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ets2_trailer_control VERSION 0.3.1 LANGUAGES CXX)
+project(ets2_trailer_control VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,7 +16,28 @@ set(TC_MSVC_OPTIONS /W4 /permissive- /utf-8)
 
 # ---------------------------------------------------------------- plugin (DLL do jogo)
 if(EXISTS "${SCS_SDK_DIR}/include/scssdk_telemetry.h")
+    # Dear ImGui (MIT), baixado no configure; nao e versionado. So o necessario para DX11 + Win32.
+    include(FetchContent)
+    FetchContent_Declare(imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG v1.91.9
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(imgui)
+    add_library(imgui_tc STATIC
+        "${imgui_SOURCE_DIR}/imgui.cpp"
+        "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+        "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+        "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp")
+    target_include_directories(imgui_tc PUBLIC "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
+    target_compile_definitions(imgui_tc PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS
+        IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE_DEBUG_TOOLS)
+    target_link_libraries(imgui_tc PUBLIC d3d11 dxgi dwmapi)
+
     add_library(trailer_control SHARED
+        src/overlay/overlay.cpp
+        src/overlay/overlay_ui.cpp
         src/plugin.cpp
         src/log.cpp
         src/config.cpp
@@ -29,6 +50,7 @@ if(EXISTS "${SCS_SDK_DIR}/include/scssdk_telemetry.h")
         src/app_launcher.cpp
         src/status_writer.cpp
         src/blinker_sound.cpp
+        src/shared/ini_edit.cpp
         src/exports.def
     )
     target_include_directories(trailer_control PRIVATE "${SCS_SDK_DIR}/include" "${CMAKE_SOURCE_DIR}/src")
@@ -36,7 +58,7 @@ if(EXISTS "${SCS_SDK_DIR}/include/scssdk_telemetry.h")
     if(MSVC)
         target_compile_options(trailer_control PRIVATE ${TC_MSVC_OPTIONS})
     endif()
-    target_link_libraries(trailer_control PRIVATE user32 shell32 ole32 psapi version winmm)
+    target_link_libraries(trailer_control PRIVATE imgui_tc user32 shell32 ole32 psapi version winmm)
 
     # Copia o .ini para junto da DLL
     add_custom_command(TARGET trailer_control POST_BUILD
@@ -85,7 +107,7 @@ add_test(NAME tc_tests COMMAND tc_tests)
 if(TARGET trailer_control)
     add_executable(fake_game tests/fake_game.cpp app/json.cpp src/shared/ini_edit.cpp)
     target_include_directories(fake_game PRIVATE "${SCS_SDK_DIR}/include" "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/app")
-    target_link_libraries(fake_game PRIVATE shell32 ole32)
+    target_link_libraries(fake_game PRIVATE shell32 ole32 user32 gdi32 d3d11 dxgi)
     add_test(NAME plugin_selftest COMMAND fake_game "$<TARGET_FILE:trailer_control>" --selftest)
     target_compile_definitions(fake_game PRIVATE ${TC_DEFINES})
     if(MSVC)
