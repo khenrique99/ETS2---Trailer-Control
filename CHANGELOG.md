@@ -4,6 +4,8 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+
+## [0.3.2] - 2026-11-27
 ### Corrigido
 - Fechamento do jogo ao soltar uma 2ª articulação com a 1ª já solta e longe: o plugin recriava a
   mangueira entre reboques já separados (cabo de dezenas de metros). Agora só liga o par que
