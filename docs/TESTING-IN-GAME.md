@@ -1,4 +1,4 @@
-# Trailer Control 0.3.2 — in-game test guide
+# Trailer Control 0.4.0-beta.1 — in-game test guide
 
 [🇧🇷 Português](TESTE-NO-JOGO.md) · **🇺🇸 English**
 
@@ -35,16 +35,20 @@ back.
 
 ## 2. How to use
 
-- In game, press **Ctrl + -** (the `-` key on the main keyboard or the numpad): the window opens.
-- Click **Desengatar** / **Engatar** on the joint you want. The window hides and the game comes
-  back — if the game paused while the window was in front, the command runs when you return.
-- **Esc** or the same shortcut, with the window in front, takes you back to the game.
-- **Configurações** (bottom of the window): changes the **shortcut that opens the window**. Click
-  **Alterar…**, press the combination you want (e.g. Ctrl + F9) and **Salvar** — it applies
-  immediately, no game restart. Other options live in `trailer_control.ini` (see "Troubleshooting").
+- In game, press **Ctrl + -** (the `-` key on the main keyboard or the numpad): the panel opens
+  **inside the game**, over the picture, without taking the game out of the foreground. It needs
+  ETS2 in **DirectX 11** (the default). If the plugin cannot hook the video, it opens `TrailerControl.exe` instead.
+- Click **Desengatar** / **Engatar** on the joint you want. While the panel is open the mouse and
+  keyboard go only to it (the truck gets nothing); the game keeps running behind.
+- **Esc**, **Fechar** or the same shortcut closes the panel. No mouse: **↑ ↓** pick the joint and
+  **Enter** couples/uncouples.
+- **Som da seta** and **Volume** are in the strip at the bottom of the panel; **Diagnóstico** writes to `game.log.txt`.
+- The shortcut that opens the panel and the other options live in `trailer_control.ini`.
+  `[tela] modo = externo` goes back to the separate window (`TrailerControl.exe`).
 
-> If ETS2 runs in **exclusive fullscreen**, it may minimize when the window appears. If that bothers
-> you, use borderless/windowed fullscreen or keep the window on a second monitor.
+> **Panel beta:** the in-game panel is new and was only tested with a "fake game" in DirectX 11.
+> If the game freezes when the panel opens, or the mouse/keyboard behave oddly, note it and use
+> `modo = externo` until it is fixed.
 
 ## 3. Checklist
 
@@ -71,6 +75,10 @@ back.
 | 19 | Edit `volume` under `[som]` in the `.ini` while the game is running | Applies within 1 s, no restart | |
 | 20 | Uncouple an internal joint (dolly/B-double) and look at the hoses between trailers | The hoses leave the loose trailer (they hang from the front one); they come back when you couple again | |
 | 21 | With the joint loose, drive the truck far away (hundreds of meters) | The game does not close; if it does, note the distance and send `game.log.txt` | |
+| 22 | With the panel open, move the mouse and press game keys (W, A, S, D, arrows) | The panel cursor appears and follows the mouse; the truck and camera do not react | |
+| 23 | Click **Desengatar** on joint 0 in the panel | Works like the external app; the panel stays open and the row turns "Solta" | |
+| 24 | Close with **Esc**, **Fechar** and **Ctrl + -** (once each) | The panel goes away and the mouse turns the camera again; no key stays "stuck" | |
+| 25 | Open the panel with the game in **fullscreen**, **windowed** and **borderless**; change the resolution | Shows in all three; the size follows the resolution | |
 
 Also note anything **unexpected**: trailer "jumping", weird physics, freezes, trailers
 disappearing, warnings when delivering the cargo, the window not showing over the game, etc.
@@ -90,9 +98,9 @@ Open an [issue](https://github.com/khenrique99/ETS2---Trailer-Control/issues) wi
 
 - **The game freezes/closes when uncoupling the dolly:** in `trailer_control.ini` (`plugins`
   folder) set `habilitado = 0` under `[memoria]`. Everything else keeps working.
-- **Ctrl + - does not open the window:** check that `TrailerControl.exe` is in the `plugins`
+- **Ctrl + - does not open the window:** look for "Painel no jogo" in `game.log.txt`. If it falls back to the external app, check that `TrailerControl.exe` is in the `plugins`
   folder next to the DLL. You can also open the exe directly; it connects by itself. If something
-  else in the game uses Ctrl + -, change the shortcut in Configurações.
+  else in the game uses Ctrl + -, change `abrir_tela` in the `.ini`. If the in-game panel does not open (log: "Painel no jogo"), use `[tela] modo = externo`.
 - **You do not want internal uncoupling in Convoy:** set `permitir_convoy = 0` under `[memoria]`.
 - **The window stays on "Aguardando o jogo" (waiting for the game):** is the DLL in
   `bin\win_x64\plugins`? Did you accept the SDK warning?

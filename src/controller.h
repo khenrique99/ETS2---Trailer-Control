@@ -2,6 +2,7 @@
 #include "config.h"
 #include "coupling_backend.h"
 #include "hotkeys.h"
+#include "status_writer.h"
 #include "trailer_registry.h"
 
 #include <atomic>
@@ -56,6 +57,7 @@ private:
     void report(const std::string &msg, bool ok = true);
     CombinationSnapshot currentSnapshot() const;
     void writeStatusIfNeeded(const CombinationSnapshot &snap);
+    StatusInfo buildStatusInfo(const CombinationSnapshot &snap) const;
     void checkMultiplayer(unsigned long long now);
     // Relê o .ini e aplica. false se o arquivo nao pode ser lido (tenta de novo depois).
     bool reloadConfig();

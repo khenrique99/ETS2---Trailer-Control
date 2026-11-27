@@ -10,6 +10,9 @@
 
 #include <windows.h>
 
+#include <d3d11.h>
+#include <dxgi.h>
+
 #include <scssdk_input.h>
 #include <scssdk_telemetry.h>
 #include <eurotrucks2/scssdk_eut2.h>
@@ -321,6 +324,183 @@ int selfTest(bool &held) {
     return failures;
 }
 
+// ---- teste do painel dentro do jogo: janela DX11 de verdade; abre com Ctrl + -, tira "foto" da tela
+// (e, se pedido, clica num ponto) para conferir o desenho e a captura de entrada sem o ETS2.
+LRESULT CALLBACK testWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    if (m == WM_DESTROY) {
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+bool saveScreenBmp(HWND hwnd, const std::wstring &path) {
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    POINT origin{0, 0};
+    ClientToScreen(hwnd, &origin);
+    const int w = rc.right, h = rc.bottom;
+    HDC screen = GetDC(nullptr);
+    HDC mem = CreateCompatibleDC(screen);
+    HBITMAP bmp = CreateCompatibleBitmap(screen, w, h);
+    HGDIOBJ old = SelectObject(mem, bmp);
+    BitBlt(mem, 0, 0, w, h, screen, origin.x, origin.y, SRCCOPY | CAPTUREBLT);
+    BITMAPINFOHEADER bi{sizeof(bi), w, -h, 1, 32, BI_RGB, 0, 0, 0, 0, 0};
+    std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4);
+    GetDIBits(mem, bmp, 0, static_cast<UINT>(h), px.data(), reinterpret_cast<BITMAPINFO *>(&bi), DIB_RGB_COLORS);
+    SelectObject(mem, old);
+    DeleteObject(bmp);
+    DeleteDC(mem);
+    ReleaseDC(nullptr, screen);
+
+    BITMAPFILEHEADER fh{0x4D42, static_cast<DWORD>(sizeof(fh) + sizeof(bi) + px.size()), 0, 0,
+                        sizeof(fh) + sizeof(bi)};
+    bi.biHeight = -h;
+    FILE *f = _wfopen(path.c_str(), L"wb");
+    if (!f) return false;
+    fwrite(&fh, sizeof(fh), 1, f);
+    fwrite(&bi, sizeof(bi), 1, f);
+    fwrite(px.data(), 1, px.size(), f);
+    fclose(f);
+    return true;
+}
+
+// Componente verde do pixel (10,10) da area do jogo: o cenario e 82; com o painel aberto fica escurecido.
+int backdropGreen(HWND hwnd) {
+    POINT o{10, 10};
+    ClientToScreen(hwnd, &o);
+    HDC screen = GetDC(nullptr);
+    const COLORREF c = GetPixel(screen, o.x, o.y);
+    ReleaseDC(nullptr, screen);
+    return GetGValue(c);
+}
+
+void sendKey(WORD vk, bool down) {
+    INPUT in{};
+    in.type = INPUT_KEYBOARD;
+    in.ki.wVk = vk;
+    in.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+    SendInput(1, &in, sizeof(in));
+}
+
+void sendComboCtrlMinus() {
+    sendKey(VK_CONTROL, true);
+    sendKey(VK_OEM_MINUS, true);
+    Sleep(120);
+    sendKey(VK_OEM_MINUS, false);
+    sendKey(VK_CONTROL, false);
+}
+
+
+int overlayTest(bool &held, const std::wstring &outPath, int clickX, int clickY) {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); // como o jogo: coordenadas reais
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = testWndProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"FakeGameDx11";
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    RegisterClassExW(&wc);
+    RECT r{0, 0, 1600, 900};
+    AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
+    HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"Jogo falso DX11", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 60, 40,
+                                r.right - r.left, r.bottom - r.top, nullptr, nullptr, wc.hInstance, nullptr);
+
+    DXGI_SWAP_CHAIN_DESC sd{};
+    sd.BufferCount = 2;
+    sd.BufferDesc.Width = 1600;
+    sd.BufferDesc.Height = 900;
+    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.OutputWindow = hwnd;
+    sd.SampleDesc.Count = 1;
+    sd.Windowed = TRUE;
+    sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    IDXGISwapChain *sc = nullptr;
+    ID3D11Device *dev = nullptr;
+    ID3D11DeviceContext *ctx = nullptr;
+    if (FAILED(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
+                                             D3D11_SDK_VERSION, &sd, &sc, &dev, nullptr, &ctx))) {
+        std::printf("[teste] nao criou o dispositivo DX11\n");
+        return 1;
+    }
+    ID3D11Texture2D *back = nullptr;
+    ID3D11RenderTargetView *rtv = nullptr;
+    sc->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&back));
+    dev->CreateRenderTargetView(back, nullptr, &rtv);
+    back->Release();
+
+    int failures = 0;
+    const bool doClick = clickX >= 0;
+    const int kOpen = 60, kShot = 140, kClick = 160, kCheck = 240, kClose = 260, kEnd = 320;
+    for (int f = 0; f <= kEnd; ++f) {
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        scs_telemetry_frame_start_t fs{};
+        fireEvent(SCS_TELEMETRY_EVENT_frame_start, &fs);
+        pumpInput(held);
+        scs_value_t speed{};
+        speed.type = SCS_VALUE_TYPE_float;
+        speed.value_float.value = 0.f;
+        fireChannel(SCS_TELEMETRY_TRUCK_CHANNEL_speed, speed);
+        fireEvent(SCS_TELEMETRY_EVENT_frame_end, nullptr);
+
+        const float bg[4] = {0.18f, 0.32f, 0.22f, 1.0f}; // "cenario" verde para ver o escurecimento
+        ctx->OMSetRenderTargets(1, &rtv, nullptr);
+        ctx->ClearRenderTargetView(rtv, bg);
+
+        if (f == 20) {
+            ShowWindow(hwnd, SW_SHOW);
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetForegroundWindow(hwnd);
+        }
+        if (f == kOpen) sendComboCtrlMinus();
+        if (f == kShot) {
+            Sleep(100);
+            std::printf("[teste] foto do painel: %s\n", saveScreenBmp(hwnd, outPath) ? "ok" : "FALHOU");
+            const int dim = backdropGreen(hwnd);
+            std::printf("[teste] %s painel aberto escurece o jogo (verde %d)\n", dim < 70 ? "OK:" : "FALHA:", dim);
+            failures += dim < 70 ? 0 : 1;
+        }
+        if (doClick && f >= kClick && f <= kClick + 20) {
+            // Cursor real no ponto (o ImGui le a posicao por GetCursorPos) e botoes por mensagem direta para
+            // a janela do teste: nao arrisca clicar em outro programa da area de trabalho.
+            POINT o{clickX, clickY};
+            ClientToScreen(hwnd, &o);
+            const LPARAM lp = MAKELPARAM(clickX, clickY);
+            if (f == kClick) std::printf("[teste] clicando em (%d, %d); conjunto engatado antes: %d\n", clickX, clickY, g_trailerCoupled);
+            if (f < kClick + 15) SetCursorPos(o.x, o.y);
+            if (f == kClick + 5) PostMessageW(hwnd, WM_MOUSEMOVE, 0, lp);
+            if (f == kClick + 8) PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lp);
+            if (f == kClick + 12) PostMessageW(hwnd, WM_LBUTTONUP, 0, lp);
+        }
+        if (doClick && f == kCheck) {
+            const bool ok = !g_trailerCoupled;
+            std::printf("[teste] %s clique no painel desengatou o conjunto\n", ok ? "OK:" : "FALHA:");
+            failures += ok ? 0 : 1;
+            saveScreenBmp(hwnd, outPath + L".depois.bmp");
+        }
+        if (f == kClose) {
+            std::printf("[teste] primeiro plano antes de fechar: %d\n", GetForegroundWindow() == hwnd);
+            sendComboCtrlMinus();
+        }
+        if (f == kEnd) {
+            const int g2 = backdropGreen(hwnd);
+            const bool ok = g2 >= 78;
+            std::printf("[teste] %s painel fechado devolve o jogo (verde %d)\n", ok ? "OK:" : "FALHA:", g2);
+            failures += ok ? 0 : 1;
+        }
+        sc->Present(1, 0);
+    }
+    if (rtv) rtv->Release();
+    if (ctx) ctx->Release();
+    if (sc) sc->Release();
+    if (dev) dev->Release();
+    return failures;
+}
+
 } // namespace
 
 int wmain(int argc, wchar_t **argv) {
@@ -380,6 +560,14 @@ int wmain(int argc, wchar_t **argv) {
     fireEvent(SCS_TELEMETRY_EVENT_started, nullptr);
 
     bool held = false;
+    if (argc >= 4 && wcscmp(argv[2], L"--overlay") == 0) {
+        const int cx = argc >= 6 ? _wtoi(argv[4]) : -1, cy = argc >= 6 ? _wtoi(argv[5]) : -1;
+        const int failures = overlayTest(held, argv[3], cx, cy);
+        telShutdown();
+        inShutdown();
+        FreeLibrary(dll);
+        return failures == 0 ? 0 : 1;
+    }
     if (selftest) {
         for (int f = 0; f < 10; ++f) frame(held);
         const int failures = selfTest(held);

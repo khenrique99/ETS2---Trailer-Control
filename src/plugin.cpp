@@ -19,6 +19,7 @@
 #include "input_backend.h"
 #include "log.h"
 #include "memory_backend.h"
+#include "overlay/overlay.h"
 
 #include <cstdio>
 #include <cstring>
@@ -236,6 +237,7 @@ SCSAPI_RESULT scs_telemetry_init(const scs_u32_t version, const scs_telemetry_in
 
 SCSAPI_VOID scs_telemetry_shutdown(void) {
     Controller::instance().stopHotkeys();
+    Overlay::instance().shutdown();
     MemoryBackend::instance().shutdown();
     log::info("Telemetria encerrada.");
 }
