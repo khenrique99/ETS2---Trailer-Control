@@ -30,6 +30,9 @@ public:
     bool initialize(bool enabled, const std::string &expectedVersion, double maxAttachDistanceM);
     void setRegistry(const TrailerRegistry *registry) { registry_ = registry; }
 
+    // Desfaz o desvio do comprimento da cadeia (precisa rodar antes de a DLL ser descarregada).
+    void shutdown();
+
     const char *name() const override { return "Memoria (experimental)"; }
     bool available() const override { return ready_ && multiplayer_.empty(); }
     bool supports(const Joint &joint) const override { return available() && joint.index >= 1; }
@@ -63,8 +66,16 @@ private:
     std::uintptr_t trailerObject(int chainIndex) const; // 0 = 1o reboque; 0 se invalido
     bool hookDistance(int jointIndex, std::uintptr_t master, double &meters) const;
     bool hasHoses(std::uintptr_t vehicle) const;
+    bool isCoupled(std::uintptr_t trailer) const;
     int chainFrom(std::uintptr_t first, std::uintptr_t *out, int max) const;
     void rebuildHoses(std::uintptr_t master, std::uintptr_t slave, bool masterHadHoses, bool pairConnected);
+
+    // Desvio de FUN_140775120 (comprimento da cadeia): a camera e outras rotinas somam o comprimento
+    // de todos os reboques ligados por +0x1058, inclusive os que soltamos. O desvio para no 1o solto.
+    void syncChainHook();
+    bool installChainHook();
+    void removeChainHook();
+    bool chainHookInstalled_ = false;
 
     // Articulacao k tinha mangueiras antes de soltar (para recriar ao engatar).
     bool hosesWereOn_[kMaxTrailers + 1] = {};
