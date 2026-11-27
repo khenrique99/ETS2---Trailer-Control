@@ -101,6 +101,34 @@ cabo esticado por centenas de metros. Correção (Unreleased): depois do `vt[0x3
 atrás + `FUN_140865600(mestre, 0)` (cabo em repouso). No engate, o inverso (`FUN_140865600(mestre,
 escravo)`). `+0xea0` do veículo é a contagem do array de cabos (só refaz onde já havia cabo).
 
+### Causa provável do fechamento do jogo (log de teste do HCT, v0.3.1)
+
+Sequência do `game.log.txt`: desengatou a articulação 2 (cabo do reboque 1 pendurado em repouso),
+dirigiu até ~88 m, desengatou a articulação 1 e o log termina na mesma hora, sem erro. Ao soltar a 1,
+`rebuildHoses` recriava o cabo de cada par de trás "que já tinha cabo" **sem checar se o par ainda
+estava engatado**: o reboque 1 tinha cabo de repouso (da 1ª soltura), então o cabo 1→2 era refeito
+entre dois reboques a ~88 m. Correção: o par só liga se o reboque de trás tem mestre (`+0x1050 != 0`);
+senão o cabo fica em repouso (`FUN_140865600(par, 0)`). Hipótese forte, mas **não testada no jogo**.
+
+Mesmo problema ao engatar: `vt[0x310]` termina chamando `FUN_140775050(this)` e engataria à força o
+reboque de trás mesmo solto. O plugin corta o elo `+0x1058` só durante a chamada (e devolve).
+
+## Câmera e comprimento da cadeia
+
+`FUN_140775120(reboque)` soma o comprimento de todos os reboques ligados por `+0x1058` (parte do
+reboque dado). Quem usa, entre outros: a câmera externa (`FUN_140485cf0`: lê
+`game+0x31b0 -> +0x18 -> +0x1580` e usa o comprimento para o recuo/zoom), o canal de console
+`trailer_length`, a IA. Como a cadeia lógica nunca é desfeita (os soltos continuam em `+0x1058`), a
+câmera seguia recuada como se todos estivessem engatados ("câmera no último reboque").
+
+Correção (v0.3.2): desvio da função inteira (198 bytes, assinatura `48 89 5c 24 08 57 48 83 ec 70
+48 8b 99 58 10 00`) por `mov rax, imm64; jmp rax`. A conta é a mesma, mas para no primeiro reboque
+com `+0x1050 == 0` (solto). Campos: `+0x20`/`+0x2c` caixa do reboque (z traseiro/dianteiro),
+`+0x200 -> +0x748` z do engate dianteiro, `FUN_140774ef0(reboque, out vec3)` engate traseiro. O
+desvio só existe com o backend ativo e é desfeito no `scs_telemetry_shutdown`. **Não testado no
+jogo**; se a câmera ainda seguir o reboque solto, ela usa outro caminho (`FUN_140989400` junta a
+posição de todos os reboques da cadeia, ainda não analisada).
+
 ## Plano para o MemoryBackend (hipótese)
 
 - **Desengatar articulação N** (entre reboque N e N+1): `reboque[N+1]->vt[0x318](reboque[N+1])`.

@@ -29,6 +29,10 @@ struct MemoryBackend::Layout {
     std::uint32_t offTrailerNext;     // reboque -> reboque de tras (owner_ptr, nunca escrever)
     std::uint32_t offTrailerMaster;   // reboque -> mestre fisico (0 = solto)
     std::uint32_t offHoseCount;       // veiculo -> quantidade de mangueiras (cabos) que ele segura
+    std::uint32_t offBoxMin;          // reboque -> float: borda traseira da caixa (usado no comprimento)
+    std::uint32_t offBoxMax;          // reboque -> float: borda dianteira da caixa
+    std::uint32_t offTrailerData;     // reboque -> dados do modelo
+    std::uint32_t offDataHookZ;       // dados -> z do engate dianteiro (local)
 
     std::uint32_t vtSlotConnect;      // vtable do reboque: engatar(this, master, pos, ...)
     std::uint32_t vtSlotDisconnect;   // vtable do reboque: desengatar(this)
@@ -38,6 +42,7 @@ struct MemoryBackend::Layout {
     std::uint32_t rvaSlaveHookPos;    // float* f(reboque, float out[3]): engate traseiro (local)
     std::uint32_t rvaClearHoses;      // void f(frente, tras): remove as mangueiras da frente e apaga as visuais
     std::uint32_t rvaBuildHoses;      // void f(frente, tras): cria as mangueiras frente -> tras (tras = 0: repouso)
+    std::uint32_t rvaChainLength;     // float f(reboque): comprimento da cadeia a partir dele (camera, IA...)
 
     // Primeiros bytes de cada funcao, conferidos antes de ativar.
     unsigned char sigConnect[16];
@@ -46,6 +51,7 @@ struct MemoryBackend::Layout {
     unsigned char sigSlaveHookPos[16];
     unsigned char sigClearHoses[16];
     unsigned char sigBuildHoses[16];
+    unsigned char sigChainLength[16];
 };
 
 namespace {
@@ -103,6 +109,15 @@ bool safeHookPos(std::uintptr_t fn, std::uintptr_t self, float *out) {
     }
 }
 
+bool safeWritePtr(std::uintptr_t addr, std::uintptr_t value) {
+    __try {
+        *reinterpret_cast<std::uintptr_t *>(addr) = value;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 // So aceita ponteiros alinhados dentro do espaco de usuario x64.
 bool plausible(std::uintptr_t p) {
     return p >= 0x10000 && p < 0x00007FFFFFFFFFFFull && (p & 7) == 0;
@@ -147,6 +162,44 @@ Vec3 toWorld(const TrailerPlacement &p, double lx, double ly, double lz) {
     const double x3 = x * std::cos(h) + z * std::sin(h);
     const double z3 = -x * std::sin(h) + z * std::cos(h);
     return {p.x + x3, p.y + y, p.z + z3};
+}
+
+// ---- desvio do comprimento da cadeia (FUN_140775120) ----
+// Estado do desvio. O jogo chama a funcao de qualquer thread, por isso so leitura depois de instalado.
+const MemoryBackend::Layout *g_chainLayout = nullptr;
+std::uintptr_t g_chainBase = 0;
+
+float readFloat(std::uintptr_t addr) { return *reinterpret_cast<const float *>(addr); }
+std::uintptr_t readPtr(std::uintptr_t addr) { return *reinterpret_cast<const std::uintptr_t *>(addr); }
+
+// Mesma conta do original (docs/re/structures-1.62.3.3.md, "Camera e comprimento da cadeia"), com uma
+// diferenca: para no primeiro reboque sem mestre (+0x1050 == 0), isto e, solto por nos. Sem isso a
+// camera continua recuada pelo comprimento de reboques que ja nao estao engatados.
+float chainLengthHookBody(std::uintptr_t trailer) {
+    const MemoryBackend::Layout *l = g_chainLayout;
+    const auto hookPos = reinterpret_cast<HookPosCall>(g_chainBase + l->rvaSlaveHookPos);
+    float sum = readFloat(trailer + l->offBoxMax) - readFloat(trailer + l->offBoxMin);
+    std::uintptr_t cur = readPtr(trailer + l->offTrailerNext);
+    for (int guard = 0; cur != 0 && guard < 64; ++guard) {
+        if (readPtr(cur + l->offTrailerMaster) == 0) break;
+        float hook[3] = {};
+        hookPos(trailer, hook);
+        const float front = readFloat(cur + l->offBoxMax);
+        const float back = readFloat(cur + l->offBoxMin);
+        const float dataZ = readFloat(readPtr(cur + l->offTrailerData) + l->offDataHookZ);
+        sum = (((front - back) + sum) - (readFloat(trailer + l->offBoxMax) - hook[2])) - (dataZ - back);
+        trailer = cur;
+        cur = readPtr(cur + l->offTrailerNext);
+    }
+    return sum;
+}
+
+float __fastcall chainLengthHook(std::uintptr_t trailer) {
+    __try {
+        return chainLengthHookBody(trailer);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0.0f;
+    }
 }
 
 } // namespace
@@ -194,6 +247,8 @@ std::uintptr_t MemoryBackend::findPattern(const std::string &pattern) {
 }
 
 bool MemoryBackend::initialize(bool enabled, const std::string &expectedVersion, double maxAttachDistanceM) {
+    // Recarregar o .ini chama isto de novo: devolve os bytes originais antes de conferir as assinaturas.
+    removeChainHook();
     ready_ = false;
     layout_ = nullptr;
     maxAttachDistanceM_ = maxAttachDistanceM;
@@ -231,6 +286,7 @@ bool MemoryBackend::initialize(bool enabled, const std::string &expectedVersion,
         {layout_->rvaSlaveHookPos, layout_->sigSlaveHookPos, "posicao do engate"},
         {layout_->rvaClearHoses, layout_->sigClearHoses, "remover mangueiras"},
         {layout_->rvaBuildHoses, layout_->sigBuildHoses, "criar mangueiras"},
+        {layout_->rvaChainLength, layout_->sigChainLength, "comprimento da cadeia"},
     };
     for (const auto &c : checks) {
         if (!safeCompare(base_ + c.rva, c.sig, 16)) {
@@ -244,7 +300,62 @@ bool MemoryBackend::initialize(bool enabled, const std::string &expectedVersion,
     log::info("Backend de memoria ativo para %s (base %p).", exeVersion_.c_str(),
               reinterpret_cast<void *>(base_));
     ready_ = true;
+    syncChainHook();
     return true;
+}
+
+// O desvio so existe enquanto o backend estiver ativo e em single-player/Convoy liberado.
+void MemoryBackend::syncChainHook() {
+    if (available()) installChainHook();
+    else removeChainHook();
+}
+
+bool MemoryBackend::installChainHook() {
+    if (chainHookInstalled_) return true;
+    if (!layout_) return false;
+    const std::uintptr_t fn = base_ + layout_->rvaChainLength;
+    if (!safeCompare(fn, layout_->sigChainLength, 16)) {
+        log::warn("Backend de memoria: bytes de 'comprimento da cadeia' nao conferem; camera nao sera ajustada.");
+        return false;
+    }
+    // mov rax, imm64 ; jmp rax  (a funcao original tem 198 bytes e e substituida por inteiro)
+    unsigned char patch[12] = {0x48, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xE0};
+    const auto target = reinterpret_cast<std::uintptr_t>(&chainLengthHook);
+    std::memcpy(patch + 2, &target, sizeof(target));
+
+    g_chainLayout = layout_;
+    g_chainBase = base_;
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(reinterpret_cast<void *>(fn), sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        log::warn("Backend de memoria: nao consegui liberar a escrita em 'comprimento da cadeia'.");
+        return false;
+    }
+    std::memcpy(reinterpret_cast<void *>(fn), patch, sizeof(patch));
+    DWORD ignored = 0;
+    VirtualProtect(reinterpret_cast<void *>(fn), sizeof(patch), oldProtect, &ignored);
+    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void *>(fn), sizeof(patch));
+    chainHookInstalled_ = true;
+    log::info("Backend de memoria: comprimento da cadeia ajustado (camera ignora reboques soltos).");
+    return true;
+}
+
+void MemoryBackend::removeChainHook() {
+    if (!chainHookInstalled_ || !layout_) return;
+    const std::uintptr_t fn = base_ + layout_->rvaChainLength;
+    DWORD oldProtect = 0;
+    if (VirtualProtect(reinterpret_cast<void *>(fn), 12, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        std::memcpy(reinterpret_cast<void *>(fn), layout_->sigChainLength, 12);
+        DWORD ignored = 0;
+        VirtualProtect(reinterpret_cast<void *>(fn), 12, oldProtect, &ignored);
+        FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void *>(fn), 12);
+        chainHookInstalled_ = false;
+        log::info("Backend de memoria: comprimento da cadeia restaurado.");
+    }
+}
+
+void MemoryBackend::shutdown() {
+    ready_ = false;
+    removeChainHook();
 }
 
 std::uintptr_t MemoryBackend::trailerObject(int chainIndex) const {
@@ -270,6 +381,7 @@ void MemoryBackend::setMultiplayer(const std::string &why) {
     multiplayer_ = why;
     if (why.empty()) log::info("Backend de memoria: single-player, liberado de novo.");
     else log::warn("Backend de memoria desligado: %s.", why.c_str());
+    syncChainHook();
 }
 
 std::string MemoryBackend::statusText() const {
@@ -367,6 +479,11 @@ bool MemoryBackend::hasHoses(std::uintptr_t vehicle) const {
     return safeReadPtr(vehicle + layout_->offHoseCount, count) && count != 0 && count < 64;
 }
 
+bool MemoryBackend::isCoupled(std::uintptr_t trailer) const {
+    std::uintptr_t master = 0;
+    return safeReadPtr(trailer + layout_->offTrailerMaster, master) && master != 0;
+}
+
 // Trecho da cadeia a partir de `first` (inclusive) ate o ultimo reboque; devolve quantos.
 int MemoryBackend::chainFrom(std::uintptr_t first, std::uintptr_t *out, int max) const {
     int n = 0;
@@ -387,9 +504,13 @@ void MemoryBackend::rebuildHoses(std::uintptr_t master, std::uintptr_t slave, bo
     const int n = chainFrom(slave, chain, kMaxTrailers);
     if (n == 0) return;
     bool downstream[kMaxTrailers] = {};
+    bool rearCoupled[kMaxTrailers] = {};
     bool any = masterHadHoses;
     for (int i = 0; i + 1 < n; ++i) {
         downstream[i] = hasHoses(chain[i]);
+        // Par que ja estava solto antes (outra articulacao desengatada): a mangueira fica em repouso,
+        // nunca ligada ao reboque distante - esticada por dezenas de metros ela derruba o jogo.
+        rearCoupled[i] = isCoupled(chain[i + 1]);
         any = any || downstream[i];
     }
     if (!any) return;
@@ -401,7 +522,9 @@ void MemoryBackend::rebuildHoses(std::uintptr_t master, std::uintptr_t slave, bo
     }
     bool ok = true;
     for (int i = 0; i + 1 < n; ++i) {
-        if (downstream[i]) ok = safeCallPair(base_ + layout_->rvaBuildHoses, chain[i], chain[i + 1]) && ok;
+        if (downstream[i]) {
+            ok = safeCallPair(base_ + layout_->rvaBuildHoses, chain[i], rearCoupled[i] ? chain[i + 1] : 0) && ok;
+        }
     }
     if (masterHadHoses) {
         // Engatado: mangueira do mestre vai para o reboque. Solto: pendura na posicao de repouso.
@@ -475,7 +598,25 @@ CouplingResult MemoryBackend::attach(const Joint &joint) {
             return CouplingResult::NotSupported;
         }
     }
-    if (!safeCall(base_ + layout_->rvaReconnectSlave, master)) {
+    // A rotina de engate do jogo tambem prende o reboque de tras do que engata, e assim por diante.
+    // Se uma articulacao mais a frente continua solta (reboque longe), isso a engataria a forca;
+    // corta o elo so durante a chamada e devolve em seguida.
+    std::uintptr_t chain[kMaxTrailers];
+    const int n = chainFrom(slave, chain, kMaxTrailers);
+    std::uintptr_t cutSlot = 0, cutValue = 0;
+    for (int i = 0; i + 1 < n; ++i) {
+        if (!isCoupled(chain[i + 1])) {
+            cutSlot = chain[i] + layout_->offTrailerNext;
+            if (!safeReadPtr(cutSlot, cutValue) || !safeWritePtr(cutSlot, 0)) cutSlot = 0;
+            break;
+        }
+    }
+    const bool called = safeCall(base_ + layout_->rvaReconnectSlave, master);
+    if (cutSlot != 0 && !safeWritePtr(cutSlot, cutValue)) {
+        log::error("Backend de memoria: nao consegui devolver o elo do reboque de tras (articulacao %d).",
+                   joint.index);
+    }
+    if (!called) {
         lastError_ = "excecao ao chamar a rotina de engate";
         log::error("Backend de memoria: excecao ao engatar articulacao %d.", joint.index);
         return CouplingResult::Unavailable;
@@ -497,6 +638,10 @@ const MemoryBackend::Layout kLayouts[] = {
         0x1058,    // reboque -> reboque de tras
         0x1050,    // reboque -> mestre
         0xea0,     // veiculo -> contagem do array de mangueiras (+0xe90)
+        0x20,      // reboque -> borda traseira da caixa (FUN_140775120)
+        0x2c,      // reboque -> borda dianteira da caixa
+        0x200,     // reboque -> dados do modelo
+        0x748,     // dados -> z do engate dianteiro
         0x310, 0x318,
         0x774710, // FUN_140774710 engatar
         0x775290, // FUN_140775290 desengatar
@@ -504,14 +649,16 @@ const MemoryBackend::Layout kLayouts[] = {
         0x774ef0, // FUN_140774ef0 posicao do engate traseiro
         0x866440, // FUN_140866440 remover mangueiras
         0x865600, // FUN_140865600 criar mangueiras
+        0x775120, // FUN_140775120 comprimento da cadeia
         {0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x18, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56},
         {0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x30, 0x48, 0x8b, 0x05, 0x0f, 0xfd, 0xf9},
         {0x40, 0x53, 0x48, 0x83, 0xec, 0x60, 0x48, 0x83, 0xb9, 0x58, 0x10, 0x00, 0x00, 0x00, 0x48, 0x8b},
         {0x4c, 0x8b, 0xdc, 0x49, 0x89, 0x5b, 0x10, 0x49, 0x89, 0x73, 0x18, 0x57, 0x48, 0x81, 0xec, 0xb0},
         {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xec, 0x40, 0x48},
         {0x48, 0x89, 0x4c, 0x24, 0x08, 0x55, 0x53, 0x41, 0x55, 0x41, 0x56, 0x48, 0x8d, 0xac, 0x24, 0x78},
+        {0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x70, 0x48, 0x8b, 0x99, 0x58, 0x10, 0x00},
     },
-    {nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, {}, {}, {}, {}, {}},
+    {nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, {}, {}, {}, {}, {}, {}},
 };
 
 const MemoryBackend::Layout *knownLayouts() { return kLayouts; }

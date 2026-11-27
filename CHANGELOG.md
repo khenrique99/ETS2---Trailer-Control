@@ -5,6 +5,17 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-27
+### Corrigido
+- Fechamento do jogo ao soltar uma 2ª articulação com a 1ª já solta e longe: o plugin recriava a
+  mangueira entre reboques já separados (cabo de dezenas de metros). Agora só liga o par que
+  continua engatado; o resto fica com a mangueira em repouso. Hipótese a partir do `game.log` —
+  **não testado no jogo**.
+- Engatar uma articulação não força mais o engate de articulações de trás que continuam soltas.
+- Câmera continuava recuada/centrada como se os reboques soltos ainda estivessem engatados: o
+  comprimento da cadeia (`FUN_140775120`) agora para no primeiro reboque solto. **Não testado no
+  jogo**.
+
 ## [0.3.1] - 2026-11-26
 ### Corrigido
 - Desengate de articulação interna (dolly, bitrem, rodotrem) agora remove as mangueiras entre os
