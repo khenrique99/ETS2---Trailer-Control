@@ -1,4 +1,4 @@
-# Trailer Control 0.3.1 — guia de teste no jogo
+# Trailer Control 0.4.0-beta.1 — guia de teste no jogo
 
 **🇧🇷 Português** · [🇺🇸 English](TESTING-IN-GAME.md)
 
@@ -31,17 +31,20 @@ resultado.
 
 ## 2. Como usar
 
-- No jogo, aperte **Ctrl + -** (o `-` do teclado principal ou do numérico): a tela abre na frente.
-- Clique **Desengatar** / **Engatar** na articulação que quiser. A tela some e o jogo volta
-  sozinho — se o jogo tiver pausado com a tela na frente, o comando roda assim que ele voltar.
-- **Esc** ou o próprio atalho, com a tela na frente, voltam ao jogo.
-- **Configurações** (rodapé da tela): troca o **atalho que abre a tela**. Clique em **Alterar…**,
-  aperte a combinação que quiser (ex.: Ctrl + F9) e **Salvar** — vale na hora, sem reiniciar o jogo.
-  As demais opções ficam no `trailer_control.ini` (veja "Se der problema").
+- No jogo, aperte **Ctrl + -** (o `-` do teclado principal ou do numérico): o painel abre **dentro
+  do jogo**, por cima da imagem, sem tirar o jogo de primeiro plano. Precisa do ETS2 em **DirectX 11**
+  (o padrão). Se o plugin não conseguir se pendurar no vídeo, ele abre o `TrailerControl.exe`.
+- Clique **Desengatar** / **Engatar** na articulação que quiser. Com o painel aberto o mouse e o
+  teclado vão só para ele (o caminhão não recebe nada); o jogo continua rodando atrás.
+- **Esc**, **Fechar** ou o próprio atalho fecham o painel. Sem mouse: **↑ ↓** escolhem a
+  articulação e **Enter** engata/desengata.
+- **Som da seta** e **Volume** ficam na faixa de baixo do painel; **Diagnóstico** escreve no `game.log.txt`.
+- O atalho que abre o painel e as demais opções ficam no `trailer_control.ini`.
+  `[tela] modo = externo` volta para a janela separada (`TrailerControl.exe`).
 
-> Se o ETS2 estiver em **tela cheia exclusiva**, ele pode minimizar quando a tela aparecer.
-> Se isso incomodar, use o jogo em janela sem bordas (tela cheia em janela) ou deixe a tela no
-> 2º monitor.
+> **Beta do painel:** o painel dentro do jogo é novo e foi testado só com um "jogo falso" em DirectX 11.
+> Se o jogo travar ao abrir o painel, ou o mouse/teclado se comportarem de forma estranha, anote e
+> use `modo = externo` até a correção.
 
 ## 3. Roteiro de teste
 
@@ -68,6 +71,10 @@ resultado.
 | 19 | Edite `volume` em `[som]` no `.ini` com o jogo aberto | Vale em até 1 s, sem reiniciar | |
 | 20 | Desengatar uma articulação interna (dolly/bitrem) e olhar as mangueiras entre os reboques | As mangueiras somem do reboque solto (ficam penduradas no da frente); ao engatar de novo voltam | |
 | 21 | Com a articulação solta, dirigir o caminhão para longe (centenas de metros) | O jogo não fecha; se fechar, anote a distância e envie o `game.log.txt` | |
+| 22 | Com o painel aberto, mexa o mouse e aperte teclas do jogo (W, A, S, D, setas do jogo) | O cursor do painel aparece e segue o mouse; o caminhão e a câmera não reagem | |
+| 23 | Clique **Desengatar** na articulação 0 pelo painel | Funciona igual ao app externo; o painel continua aberto e a linha vira "Solta" | |
+| 24 | Feche com **Esc**, **Fechar** e com **Ctrl + -** (uma vez cada) | O painel some e o mouse volta a girar a câmera; nenhuma tecla fica "presa" | |
+| 25 | Abra o painel com o jogo em **tela cheia**, **janela** e **sem bordas**; troque a resolução | Aparece nos três; o tamanho acompanha a resolução | |
 
 Anote também o que **não** for esperado: reboque que "pula", física estranha, travamento,
 reboque sumindo, aviso na entrega da carga, tela que não aparece por cima do jogo etc.
@@ -87,9 +94,9 @@ Abra uma [issue](https://github.com/khenrique99/ETS2---Trailer-Control/issues) c
 
 - **O jogo trava/fecha ao desengatar o dolly:** no `trailer_control.ini` (pasta `plugins`),
   coloque `habilitado = 0` em `[memoria]`. O resto continua funcionando.
-- **Ctrl + - não abre a tela:** confira se o `TrailerControl.exe` está na pasta `plugins` junto da
+- **Ctrl + - não abre a tela:** procure "Painel no jogo" no `game.log.txt`. Se ele cair no app externo, confira se o `TrailerControl.exe` está na pasta `plugins` junto da
   DLL. Dá para abrir o exe direto também; ele conecta sozinho. Se outra coisa do jogo usa
-  Ctrl + -, troque o atalho em Configurações.
+  Ctrl + -, troque `abrir_tela` no `.ini`. Se o painel dentro do jogo não abrir (log: "Painel no jogo"), use `[tela] modo = externo`.
 - **Não quer o desengate interno no Convoy:** `permitir_convoy = 0` em `[memoria]` no `.ini`.
 - **Tela fica em "Aguardando o jogo":** a DLL está em `bin\win_x64\plugins`? Aceitou o aviso de SDK?
 - **Articulações internas "indisponível":** a mensagem ao lado diz o motivo (versão diferente,
